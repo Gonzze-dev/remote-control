@@ -13,8 +13,8 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * Una app de la grilla. [link] es lo que se manda a la tele (link directo o
- * `market://launch?id=<paquete>`). [pkg] sirve para marcar la app abierta y como plan B.
+ * Una app de la grilla. [link] es lo que se manda a la tele (link directo o la ficha de Play
+ * Store, ver [marketLink]). [pkg] sirve para marcar la app abierta y como plan B.
  */
 data class TvApp(
     val id: String = UUID.randomUUID().toString(),
@@ -25,7 +25,23 @@ data class TvApp(
     val packageLink: String? get() = pkg.takeIf { it.isNotBlank() }?.let { marketLink(it) }
 
     companion object {
-        fun marketLink(pkg: String) = "market://launch?id=$pkg"
+        /** Play Store, que abre las fichas de [marketLink]. */
+        const val PLAY_STORE = "com.android.vending"
+
+        private const val DETAILS = "market://details?id="
+        private const val LAUNCH = "market://launch?id="
+
+        /**
+         * Abrir una app por paquete. La tele rechaza `market://launch` (y `android-app://` o
+         * `intent:`) aunque la app esté instalada, pero acepta la ficha de Play Store, que se abre
+         * con "Abrir" seleccionado: después de mandarla, la app aprieta OK (probado el 14/11/2026).
+         */
+        fun marketLink(pkg: String) = DETAILS + pkg
+
+        fun isMarketLink(link: String) = link.startsWith(DETAILS)
+
+        /** Las apps guardadas antes del cambio tienen `market://launch`: se pasan a la ficha. */
+        fun upgradeLink(link: String) = if (link.startsWith(LAUNCH)) DETAILS + link.removePrefix(LAUNCH) else link
     }
 }
 
@@ -78,7 +94,7 @@ class AppsRepository(context: Context) {
             val array = JSONArray(json)
             return List(array.length()) { i ->
                 val o = array.getJSONObject(i)
-                TvApp(o.getString("id"), o.getString("name"), o.getString("link"), o.optString("pkg"))
+                TvApp(o.getString("id"), o.getString("name"), TvApp.upgradeLink(o.getString("link")), o.optString("pkg"))
             }
         }
     }

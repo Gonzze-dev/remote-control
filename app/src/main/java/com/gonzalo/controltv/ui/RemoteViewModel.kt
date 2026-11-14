@@ -27,10 +27,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Conecta las pantallas con [com.gonzalo.controltv.tv.TvConnection]. Los botones nunca tocan el socket. */
 class RemoteViewModel(application: Application) : AndroidViewModel(application), RemoteActions {
@@ -140,7 +142,38 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
 
     fun launch(tvApp: TvApp, byPackage: Boolean = false) {
         val link = if (byPackage) tvApp.packageLink ?: tvApp.link else tvApp.link
-        if (!connection.launchApp(link)) toast("Sin conexión con la tele")
+        val wasInStore = (state.value as? TvState.Conectado)?.app == TvApp.PLAY_STORE
+        if (!connection.launchApp(link)) {
+            toast("Sin conexión con la tele")
+            return
+        }
+        if (TvApp.isMarketLink(link)) pressOpenInStore(wasInStore)
+    }
+
+    private var pressingOpen: Job? = null
+
+    /**
+     * Abrir por paquete muestra la ficha de Play Store con "Abrir" seleccionado: cuando la tele
+     * avisa que está en Play Store, se espera a que cargue la ficha y se aprieta OK.
+     */
+    private fun pressOpenInStore(wasInStore: Boolean) {
+        pressingOpen?.cancel()
+        pressingOpen = viewModelScope.launch {
+            if (wasInStore) {
+                // Ya estaba en Play Store: la tele no avisa de nuevo, así que se espera más.
+                delay(STORE_SETTLE_MS * 2)
+            } else {
+                val opened = withTimeoutOrNull(STORE_WAIT_MS) {
+                    state.first { (it as? TvState.Conectado)?.app == TvApp.PLAY_STORE }
+                }
+                if (opened == null) {
+                    toast("La tele no abrió la app")
+                    return@launch
+                }
+                delay(STORE_SETTLE_MS)
+            }
+            connection.sendKey(Keys.DPAD_CENTER)
+        }
     }
 
     // ---- Apps ----
@@ -311,6 +344,12 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     companion object {
         /** Cuánto se espera a que la tele abra el buscador después de recibir texto. */
         private const val FIELD_WAIT_MS = 2_500L
+
+        /** Cuánto se espera a que la tele abra Play Store (en la prueba tardó 1,4 s). */
+        private const val STORE_WAIT_MS = 5_000L
+
+        /** Lo que se deja cargar la ficha antes de apretar OK en "Abrir". */
+        private const val STORE_SETTLE_MS = 1_000L
         private val HOST = Regex("^[A-Za-z0-9.:\\-]{1,253}$")
 
         fun isValidHost(host: String): Boolean {

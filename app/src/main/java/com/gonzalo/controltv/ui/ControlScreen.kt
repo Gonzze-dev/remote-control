@@ -123,7 +123,8 @@ fun ControlScreen(
             } else {
                 min(min(maxWidth * 0.7f, maxHeight - 12.dp), 300.dp)
             }.coerceAtLeast(120.dp)
-            val clusterWidth = maxOf(padSize, 280.dp).coerceAtMost(maxWidth)
+            // Las filas son un poco más anchas que el pad, para que el volumen entre junto a tres botones.
+            val clusterWidth = maxOf(padSize + 48.dp, 300.dp).coerceAtMost(maxWidth)
             // En pantallas altas, el aire sobrante se reparte entre las filas en vez de quedar todo arriba y abajo.
             val gap = ((maxHeight - padSize - 64.dp - 56.dp) / 4).coerceIn(28.dp, 44.dp)
             val poweredOff = state is TvState.Conectado && !state.prendida
@@ -160,7 +161,7 @@ fun ControlScreen(
                         VolumeRocker(
                             onDown = { actions.key(Keys.VOLUME_DOWN) },
                             onUp = { actions.key(Keys.VOLUME_UP) },
-                            width = clusterWidth - 56.dp * 2 - 24.dp,
+                            width = clusterWidth - 56.dp * 3 - 12.dp * 3,
                         )
                         RoundKey(
                             R.drawable.ic_volume_off, "Silencio", { actions.key(Keys.VOLUME_MUTE) },
@@ -168,6 +169,9 @@ fun ControlScreen(
                             tint = if (volume?.muted == true) Palette.Red else Palette.Text,
                         )
                         RoundKey(R.drawable.ic_play_pause, "Play o pausa", { actions.key(Keys.MEDIA_PLAY_PAUSE) }, size = 56.dp, hold = Hold.None)
+                        // La tecla de configuración del control: abre el panel rápido de Google TV.
+                        // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
+                        RoundKey(R.drawable.ic_tune, "Panel rápido", { actions.key(Keys.SETTINGS) }, size = 56.dp, hold = Hold.None)
                     }
                 }
             }

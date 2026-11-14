@@ -17,9 +17,10 @@ gradlew testDebugUnitTest    → pruebas + capturas de pantalla
 
 ## Probar sin la tele
 
-`gradlew testDebugUnitTest` corre 35 pruebas:
+`gradlew testDebugUnitTest` corre 37 pruebas:
 
 - **ProtocolTest**: bytes exactos de cada mensaje, el secreto de vinculación y el certificado.
+- **AppLinksTest**: el link para abrir una app por paquete y el cambio de los links viejos.
 - **FakeTvTest**: una tele de mentira con TLS de verdad (`FakeTv.kt`). Prueba la vinculación con el
   código, el código mal tipeado, la sesión de control (teclas, texto, apps, ping, volumen),
   el celu desconocido, la huella cambiada, la reconexión, que muchos reinicios seguidos no
@@ -38,14 +39,15 @@ Oscuro, porque se usa de noche frente a la tele: fondo grafito y un solo color d
 
 - **Control**: línea de estado arriba (punto de conexión, app en pantalla, volumen, Ajustes).
   En el medio, el pad circular con el OK ámbar como protagonista; abajo, Atrás · Inicio ·
-  Encendido y, más abajo, volumen · silencio · play/pausa. La barra de texto queda cerca del
+  Encendido y, más abajo, volumen · silencio · play/pausa · panel rápido. La barra de texto queda cerca del
   pulgar: el campo y el micrófono (borrar y mandar se hacen con el teclado del celu). Si el
   teclado ocupa la pantalla, se esconden las filas y queda el pad.
 - **Apps**: grilla de tarjetas con el ícono de cada app. El ícono oficial se baja una vez de
   Google Play (por el nombre de paquete) y queda guardado; al editar una app se puede elegir una
   imagen propia. Sin ícono se ve una inicial de color, que es lo que muestran las capturas (así
-  el repo no lleva logos de marcas). La app abierta en la tele se marca en ámbar, y arriba
-  aparece "En pantalla" con el botón para agregarla a la lista.
+  el repo no lleva logos de marcas). La app abierta en la tele se marca en ámbar. Si en la tele
+  hay una app que no está en la lista (y no es una pantalla del sistema), arriba aparece
+  "En pantalla" con el botón para agregarla.
 - **Vinculación**: dos pasos (IP y código), con el código en 6 casillas grandes.
 
 ![Control](docs/diseno/01_control.png)
@@ -63,6 +65,11 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 - Las flechas y el volumen se repiten al mantenerlos apretados (manda toques seguidos).
 - OK, Atrás e Inicio hacen pulsación larga en la tele (`START_LONG` → `END_LONG`): por ejemplo, el menú contextual.
 - Encendido y play/pausa no tienen pulsación larga, para no apagar la tele sin querer.
+- **Panel rápido** manda la tecla de configuración del control y abre el panel de Google TV.
+  Es la forma de llegar a la configuración: la tele rechaza los links a sus pantallas.
+- Las apps sin link propio se abren **por paquete**: la app manda la ficha de Play Store
+  (`market://details?id=…`), que se abre con "Abrir" seleccionado, y cuando la tele avisa que
+  está en Play Store espera 1 s y aprieta OK. Si la app no está instalada, ese OK cae en "Instalar".
 
 ## Diferencias con el plan
 
@@ -83,10 +90,16 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 - **Conexión muerta**: se da por muerta si pasan 16 s sin que *nadie* mande nada. La tele no hace
   ping mientras recibe comandos, así que lo que manda el celu también cuenta, como en la librería
   de referencia.
+- **Abrir por paquete con la ficha de Play Store**: el plan usaba `market://launch?id=…`, pero
+  esta tele lo rechaza aunque la app esté instalada. Las apps guardadas con el link viejo se
+  pasan solas al nuevo.
+- **Sin accesos directos a la configuración**: se probaron links a cada pantalla (`intent:` con
+  y sin paquete, y abrir la app Configuración) y la tele rechazó todos. Quedó el botón Panel
+  rápido.
 
 ## Probado con la tele real
 
-13/11/2026 · Chromecast con Google TV en una tele Sony · Galaxy S25 Ultra con Android 17.
+13 y 14/11/2026 · Chromecast con Google TV en una tele Sony · Galaxy S25 Ultra con Android 17.
 
 | Qué | Resultado |
 |---|---|
@@ -95,7 +108,11 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 | Conexión, pings y reconexión al volver a la app | ✅ |
 | Flechas, OK, Atrás, Inicio, borrar y Enter | ✅ |
 | Volumen, silencio y play/pausa | Salen sin errores; falta verlos en pantalla |
+| Encendido (la tele avisa que prendió) | ✅ |
+| Panel rápido (abre la configuración) | ✅ |
 | Abrir apps por link (YouTube, Netflix) | ✅ |
+| Abrir apps por paquete (Moonlight, con la ficha de Play Store) | ✅ |
+| Links a pantallas de configuración | ❌ La tele los rechaza |
 | Íconos de las apps desde Google Play | ✅ |
 | Texto al enviar, en el buscador de Google TV | ✅ |
 | Texto en vivo (letra por letra y borrados) | ✅ |
@@ -110,6 +127,11 @@ Lo que se aprendió:
 - Mientras recibe comandos, la tele no manda pings.
 - Hay un mensaje que no figura en los `.proto` de referencia (campo 24). El log muestra sus bytes
   para poder descifrarlo.
-- Falta probar el resto de los links de la lista de apps y el encendido.
+- La tele rechaza los links que ninguna app sabe abrir: contesta `remote_error` y corta la
+  conexión (la app reconecta sola en 0,1 s). Pasa con `intent:`, `android-app://` y
+  `market://launch`, aunque la app esté instalada. `market://details` y
+  `https://play.google.com/…` sí andan.
+- Desde el protector de pantalla, la primera tecla solo despierta la tele.
+- Falta probar el resto de los links de la lista de apps.
 
 Si algo falla, Ajustes → Log de conexión muestra cada mensaje que va y viene, y se puede copiar.

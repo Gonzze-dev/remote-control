@@ -212,8 +212,13 @@ fun VolumeRocker(
         ) {
             Icon(painterResource(R.drawable.ic_volume_down), null, tint = Palette.Text, modifier = Modifier.size(24.dp))
         }
-        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
-            Text("VOL", color = Palette.TextFaint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+        // En pantallas angostas el "VOL" no entra: queda una rayita y el lugar es para los botones.
+        if (width >= 140.dp) {
+            Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+                Text("VOL", color = Palette.TextFaint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+            }
+        } else {
+            Box(Modifier.width(1.dp).height(height * 0.4f).background(Palette.Outline))
         }
         Box(
             Modifier
@@ -351,10 +356,7 @@ fun DPad(
                     contentDescription = "OK"
                     onClick { key(Keys.DPAD_CENTER); true }
                 },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("OK", color = Palette.OnAccent, fontWeight = FontWeight.Bold, fontSize = (size.value * 0.075f).sp, letterSpacing = 1.sp)
-        }
+        )
     }
 }
 
