@@ -21,4 +21,12 @@ class AppLinksTest {
         assertEquals("netflix://", TvApp.upgradeLink("netflix://"))
         assertEquals("market://details?id=a.b", TvApp.upgradeLink("market://details?id=a.b"))
     }
+
+    @Test
+    fun cleanYourTvHomeIsHomeNotAnApp() {
+        // Con el Inicio de CleanYourTV en pantalla no tiene que aparecer "En pantalla → Agregar".
+        assertTrue(AppNames.isSystem("com.gathin.tvhome"))
+        assertEquals("Inicio", AppNames.label("com.gathin.tvhome", emptyList()))
+        assertFalse(AppNames.isSystem("ar.com.flow.androidtv"))
+    }
 }

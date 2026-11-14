@@ -102,6 +102,9 @@ class AppsRepository(context: Context) {
 
 /** Nombre lindo para un paquete: primero tu lista, después algunos conocidos, si no el paquete. */
 object AppNames {
+    /** El Inicio de CleanYourTV que tiene la tele (el botón Inicio lo abre en lugar del de Google TV). */
+    const val CLEAN_HOME = "com.gathin.tvhome"
+
     private val known = mapOf(
         "com.google.android.youtube.tv" to "YouTube",
         "com.google.android.youtube.tvmusic" to "YouTube Music",
@@ -115,6 +118,7 @@ object AppNames {
         "org.xbmc.kodi" to "Kodi",
         "com.google.android.apps.tv.launcherx" to "Inicio",
         "com.google.android.tvlauncher" to "Inicio",
+        CLEAN_HOME to "Inicio",
         "com.android.tv.settings" to "Configuración",
         "com.google.android.katniss" to "Asistente",
         "com.google.android.apps.tv.dreamx" to "Protector de pantalla",
@@ -124,7 +128,7 @@ object AppNames {
     /** Pantallas del sistema (Inicio, Configuración, protector…): no tiene sentido agregarlas a la lista. */
     fun isSystem(pkg: String): Boolean =
         pkg.startsWith("com.android.") || pkg.startsWith("com.google.android.apps.tv.") ||
-            pkg in setOf("com.google.android.tvlauncher", "com.google.android.leanbacklauncher", "com.google.android.katniss", "com.google.android.backdrop")
+            pkg in setOf("com.google.android.tvlauncher", "com.google.android.leanbacklauncher", "com.google.android.katniss", "com.google.android.backdrop", CLEAN_HOME)
 
     fun label(pkg: String, apps: List<TvApp>): String =
         apps.firstOrNull { it.pkg == pkg }?.name ?: known[pkg] ?: fromPackage(pkg)

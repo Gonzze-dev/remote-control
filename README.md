@@ -17,14 +17,22 @@ gradlew testDebugUnitTest    → pruebas + capturas de pantalla
 
 ## Probar sin la tele
 
-`gradlew testDebugUnitTest` corre 37 pruebas:
+`gradlew testDebugUnitTest` corre 50 pruebas (y saltea una que necesita el Chromecast de verdad):
 
 - **ProtocolTest**: bytes exactos de cada mensaje, el secreto de vinculación y el certificado.
-- **AppLinksTest**: el link para abrir una app por paquete y el cambio de los links viejos.
+- **AppLinksTest**: el link para abrir una app por paquete, el cambio de los links viejos y que el Inicio de
+  CleanYourTV cuente como Inicio.
 - **FakeTvTest**: una tele de mentira con TLS de verdad (`FakeTv.kt`). Prueba la vinculación con el
   código, el código mal tipeado, la sesión de control (teclas, texto, apps, ping, volumen),
   el celu desconocido, la huella cambiada, la reconexión, que muchos reinicios seguidos no
   dejen sesiones abiertas de más y que mandar comandos sin parar no corte la sesión.
+- **CastClientTest**: un Chromecast de mentira con TLS de verdad (`FakeCast.kt`). Prueba los bytes de Cast v2,
+  abrir el reproductor y cargar un archivo, el archivo que no se puede abrir, los PING, el final del video,
+  cerrar el reproductor desde la tele y Detener.
+- **MediaServerTest**: el servidor que le da el archivo al Chromecast: el archivo entero, los rangos para
+  adelantar, el rango fuera del archivo y que solo se sirva el archivo publicado.
+- **CastLiveTest**: muestra el logo de Google en el Chromecast real y lo cierra. Solo corre con
+  `CAST_LIVE_HOST=192.168.1.31`.
 - **ScreenshotTest**: genera las capturas de `docs/diseno/` (quedan en `app/build/outputs/roborazzi/`).
 
 ## Diseño
@@ -39,7 +47,7 @@ Oscuro, porque se usa de noche frente a la tele: fondo grafito y un solo color d
 
 - **Control**: línea de estado arriba (punto de conexión, app en pantalla, volumen, Ajustes).
   En el medio, el pad circular con el OK ámbar como protagonista; abajo, Atrás · Inicio ·
-  Encendido y, más abajo, volumen · silencio · play/pausa · panel rápido. La barra de texto queda cerca del
+  Encendido y, más abajo, volumen · silencio · play/pausa · panel rápido · transmitir. La barra de texto queda cerca del
   pulgar: el campo y el micrófono (borrar y mandar se hacen con el teclado del celu). Si el
   teclado ocupa la pantalla, se esconden las filas y queda el pad.
 - **Apps**: grilla de tarjetas con el ícono de cada app. El ícono oficial se baja una vez de
@@ -62,6 +70,9 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 - Si la tele no tiene un buscador abierto, al recibir texto lo abre sola, pero descarta ese
   primer texto. La app espera hasta 2,5 s a que aparezca el campo, manda el texto de nuevo y
   después el Enter. Si no aparece (por ejemplo, dentro de Netflix), avisa.
+- En el Inicio de CleanYourTV (ver más abajo) no hay campo: la app manda el texto y el launcher busca el texto
+  entero en Google TV. Con "Texto en vivo" no se manda letra por letra, porque cada letra suelta lanzaría una
+  búsqueda: el texto sale todo junto con la tecla de acción.
 - Las flechas y el volumen se repiten al mantenerlos apretados (manda toques seguidos).
 - OK, Atrás e Inicio hacen pulsación larga en la tele (`START_LONG` → `END_LONG`): por ejemplo, el menú contextual.
 - Encendido y play/pausa no tienen pulsación larga, para no apagar la tele sin querer.
@@ -70,6 +81,32 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 - Las apps sin link propio se abren **por paquete**: la app manda la ficha de Play Store
   (`market://details?id=…`), que se abre con "Abrir" seleccionado, y cuando la tele avisa que
   está en Play Store espera 1 s y aprieta OK. Si la app no está instalada, ese OK cae en "Instalar".
+- **Transmitir** manda una foto, un video o un audio del celu al Chromecast, como el botón de transmitir de
+  YouTube. "Fotos y videos" abre la galería; "Archivo del celu", el selector de archivos (Descargas y otras
+  carpetas). El botón queda ámbar mientras se transmite; ahí mismo y en la notificación está Detener. Elegir
+  otro archivo reemplaza al anterior en la misma sesión. Pausa, adelantar, Atrás e Inicio van con el control
+  de siempre.
+
+## Transmitir desde el celu
+
+Es Cast v2, el protocolo del botón de transmitir, hecho a mano como el del control (`cast/`), sin la librería
+de Google Cast:
+
+1. El celu abre TLS al puerto 8009 del Chromecast y le pide el reproductor estándar de Google (Default Media
+   Receiver, `CC1AD845`), que muestra fotos, video y audio a partir de una dirección.
+2. Un servidor HTTP mínimo en el celu (`MediaServer`) sirve solo el archivo elegido, bajo una ruta con un
+   código al azar, y entiende `Range` para que se pueda adelantar.
+3. El celu le manda al reproductor `LOAD` con `http://<ip del celu>:<puerto>/m/<código>/<nombre>`, y el
+   Chromecast lo baja de ahí.
+
+`CastService` es un servicio en primer plano (tipo `mediaPlayback`): con la notificación y un wake lock
+sigue sirviendo una peli entera aunque el celu se bloquee o la app se cierre. El permiso de lectura del
+archivo se pide persistente y se suelta al terminar. La sesión termina sola cuando el video llega al final o
+cuando se cierra el reproductor en la tele. El reproductor informa las fotos como `PAUSED`, así que una foto
+queda en pantalla hasta que se cierra.
+
+Formatos: MP4 con H.264 o HEVC y audio AAC anda siempre. Los `.mkv` y `.mov` se presentan como MP4 para que el
+reproductor los intente: andan si los códecs son de los que entiende (no AC3, DTS ni subtítulos).
 
 ## Diferencias con el plan
 
@@ -117,6 +154,8 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 | Texto al enviar, en el buscador de Google TV | ✅ |
 | Texto en vivo (letra por letra y borrados) | ✅ |
 | Dictado por voz desde Inicio (abre el buscador y busca) | ✅ |
+| Buscar desde el Inicio de CleanYourTV, con teclado y voz | ✅ |
+| Transmitir una foto, un video de WhatsApp y un capítulo MP4 de 277 MB (pausa, adelantar, Detener) | ✅ |
 
 Lo que se aprendió:
 
@@ -135,3 +174,19 @@ Lo que se aprendió:
 - Falta probar el resto de los links de la lista de apps.
 
 Si algo falla, Ajustes → Log de conexión muestra cada mensaje que va y viene, y se puede copiar.
+
+## La tele con CleanYourTV
+
+Desde el 14/11/2026 el Chromecast tiene la limpieza de [cleanyour.tv](https://cleanyour.tv/): telemetría,
+publicidad y apps que no se usan desactivadas, y su launcher (`com.gathin.tvhome`) como Inicio. El Inicio de
+Google sigue habilitado por debajo para no perder el casteo desde el celu, y un servicio de accesibilidad del
+launcher manda el botón Inicio al nuevo. Lo que cambia para esta app:
+
+- El launcher nuevo figura como "Inicio" y no aparece en "En pantalla" (`AppNames.CLEAN_HOME`).
+- Buscar desde Inicio depende de un parche local del launcher: junta las letras que le llegan y lanza la
+  búsqueda de Google TV. Sin el parche, el texto mandado desde Inicio no hace nada.
+- Mantener apretado Inicio sigue abriendo el panel de Google, y Panel rápido anda igual.
+- El buscador de YouTube no deja escribir desde el control: usa su propio teclado en pantalla. La voz sí anda.
+
+El respaldo, los scripts para reinstalar el launcher o deshacer todo, y el parche están en
+`Desktop\cleanyourtv\backup\comedor-2026-11-14\` (ver su `LEEME.md`).

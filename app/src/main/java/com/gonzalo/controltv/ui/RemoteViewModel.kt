@@ -6,6 +6,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gonzalo.controltv.App
+import com.gonzalo.controltv.cast.CastService
+import com.gonzalo.controltv.cast.CastState
+import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.data.TvApp
 import com.gonzalo.controltv.tv.Direction
@@ -53,6 +56,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     }
 
     init {
+        viewModelScope.launch { CastService.messages.collect { toast(it) } }
         // Cada vez que cambia la lista o la app en pantalla, se buscan los íconos que falten.
         viewModelScope.launch {
             combine(apps, state.map { (it as? TvState.Conectado)?.app }.distinctUntilChanged()) { list, pkg -> list to pkg }
@@ -80,6 +84,13 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     private var pendingText = ""
     private var pendingEnter = false
 
+    /**
+     * En pantalla está el Inicio de CleanYourTV: junta las letras que le llegan sin campo abierto y busca el
+     * texto entero en Google TV (parche local del launcher). No abre ningún campo, así que no hay que esperarlo.
+     */
+    private fun cleanHomeSearches(fieldOpen: Boolean) =
+        !fieldOpen && (state.value as? TvState.Conectado)?.app == AppNames.CLEAN_HOME
+
     override fun sendText(text: String): Boolean {
         if (text.isEmpty()) return false
         val enter = settings.value?.enterAfterText == true
@@ -88,6 +99,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
             toast("Sin conexión con la tele: no se mandó el texto")
             return false
         }
+        if (cleanHomeSearches(fieldOpen)) return true
         if (fieldOpen) {
             if (enter) {
                 viewModelScope.launch {
@@ -108,7 +120,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
             pendingText = new // se manda todo junto cuando la tele abra el campo
             return
         }
-        if (!connection.textFieldOpen()) {
+        val fieldOpen = connection.textFieldOpen()
+        // En el Inicio de CleanYourTV cada letra suelta lanzaría una búsqueda: se manda todo con la tecla de acción.
+        if (cleanHomeSearches(fieldOpen)) return
+        if (!fieldOpen) {
             if (new.isNotEmpty() && connection.sendText(new)) sendWhenFieldOpens(new, enter = false)
             return
         }
@@ -116,6 +131,28 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         repeat(old.length - common) { connection.sendKey(Keys.DEL) }
         val added = new.substring(common)
         if (added.isNotEmpty()) connection.sendText(added)
+    }
+
+    // ---- Transmitir ----
+
+    val casting: StateFlow<CastState> = CastService.state
+
+    override fun castMedia(uri: Uri) {
+        if (settings.value?.isPaired != true) {
+            toast("Primero vinculá la tele")
+            return
+        }
+        CastService.cast(getApplication(), uri)
+    }
+
+    override fun stopCasting() = CastService.stop(getApplication())
+
+    override fun liveSubmit(text: String) {
+        if (text.isNotBlank() && cleanHomeSearches(connection.textFieldOpen())) {
+            if (!connection.sendText(text)) toast("Sin conexión con la tele: no se mandó el texto")
+        } else {
+            connection.sendKey(Keys.ENTER)
+        }
     }
 
     private fun sendWhenFieldOpens(text: String, enter: Boolean) {

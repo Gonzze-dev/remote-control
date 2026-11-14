@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gonzalo.controltv.R
+import com.gonzalo.controltv.cast.CastState
 import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.tv.TvState
@@ -115,6 +116,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
     val state by vm.state.collectAsStateWithLifecycle()
     val apps by vm.apps.collectAsStateWithLifecycle()
     val icons by vm.icons.collectAsStateWithLifecycle()
+    val casting by vm.casting.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Control) }
     var overlay by rememberSaveable { mutableStateOf(Overlay.None) }
     val snackbar = remember { SnackbarHostState() }
@@ -186,6 +188,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
                         onOpenSettings = { overlay = Overlay.Settings },
                         onRepair = vm::openPairing,
                         onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
+                        casting = casting != CastState.Idle,
                     )
                     Tab.Apps -> AppsScreen(
                         apps = apps,

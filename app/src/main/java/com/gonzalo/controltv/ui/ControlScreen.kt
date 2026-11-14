@@ -1,6 +1,17 @@
 package com.gonzalo.controltv.ui
 
 import android.app.Activity
+import android.Manifest
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.core.content.ContextCompat
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
@@ -62,7 +73,12 @@ interface RemoteActions {
     /** Devuelve false si no se pudo mandar (sin conexión). */
     fun sendText(text: String): Boolean
     fun liveEdit(old: String, new: String)
+    /** La tecla de acción del teclado en modo en vivo: Enter en la tele (o buscar, ver [RemoteViewModel]). */
+    fun liveSubmit(text: String)
     fun retry()
+    /** Manda una foto, un video o un audio del celu al Chromecast. */
+    fun castMedia(uri: Uri)
+    fun stopCasting()
 
     object Noop : RemoteActions {
         override fun key(code: Int) = Unit
@@ -70,7 +86,10 @@ interface RemoteActions {
         override fun keyLongEnd(code: Int) = Unit
         override fun sendText(text: String) = true
         override fun liveEdit(old: String, new: String) = Unit
+        override fun liveSubmit(text: String) = Unit
         override fun retry() = Unit
+        override fun castMedia(uri: Uri) = Unit
+        override fun stopCasting() = Unit
     }
 }
 
@@ -84,6 +103,7 @@ fun ControlScreen(
     onRepair: () -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    casting: Boolean = false,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
     var lastSent by rememberSaveable { mutableStateOf<String?>(null) }
@@ -153,6 +173,8 @@ fun ControlScreen(
                             border = if (poweredOff) Palette.Red.copy(alpha = 0.5f) else Palette.OutlineSoft,
                         )
                     }
+                    // Volumen y cuatro botones: los botones se achican un poco antes que el balancín.
+                    val smallKey = ((clusterWidth - 96.dp - 8.dp * 4) / 4).coerceIn(44.dp, 56.dp)
                     Row(
                         Modifier.width(clusterWidth),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -161,17 +183,18 @@ fun ControlScreen(
                         VolumeRocker(
                             onDown = { actions.key(Keys.VOLUME_DOWN) },
                             onUp = { actions.key(Keys.VOLUME_UP) },
-                            width = clusterWidth - 56.dp * 3 - 12.dp * 3,
+                            width = clusterWidth - smallKey * 4 - 8.dp * 4,
                         )
                         RoundKey(
                             R.drawable.ic_volume_off, "Silencio", { actions.key(Keys.VOLUME_MUTE) },
-                            size = 56.dp, hold = Hold.None,
+                            size = smallKey, hold = Hold.None,
                             tint = if (volume?.muted == true) Palette.Red else Palette.Text,
                         )
-                        RoundKey(R.drawable.ic_play_pause, "Play o pausa", { actions.key(Keys.MEDIA_PLAY_PAUSE) }, size = 56.dp, hold = Hold.None)
+                        RoundKey(R.drawable.ic_play_pause, "Play o pausa", { actions.key(Keys.MEDIA_PLAY_PAUSE) }, size = smallKey, hold = Hold.None)
                         // La tecla de configuración del control: abre el panel rápido de Google TV.
                         // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
-                        RoundKey(R.drawable.ic_tune, "Panel rápido", { actions.key(Keys.SETTINGS) }, size = 56.dp, hold = Hold.None)
+                        RoundKey(R.drawable.ic_tune, "Panel rápido", { actions.key(Keys.SETTINGS) }, size = smallKey, hold = Hold.None)
+                        CastKey(casting, smallKey, actions::castMedia, actions::stopCasting)
                     }
                 }
             }
@@ -187,7 +210,7 @@ fun ControlScreen(
             placeholder = lastSent?.let { "Mandado: «$it»" } ?: "Escribir en la tele…",
             onSend = {
                 if (settings.liveText) {
-                    actions.key(Keys.ENTER)
+                    actions.liveSubmit(text)
                     if (text.isNotBlank()) lastSent = text
                     text = "" // en vivo la tele ya tiene el texto: solo se limpia el campo
                 } else {
@@ -315,6 +338,72 @@ private fun VolumeChip(level: Int?, muted: Boolean) {
         if (level != null) {
             Spacer(Modifier.width(4.dp))
             Text(level.toString(), style = MaterialTheme.typography.labelLarge, color = Palette.Text)
+        }
+    }
+}
+
+/**
+ * Transmitir: elegir una foto, un video o un audio del celu y mandarlo al Chromecast (ver [CastService]).
+ * "Fotos y videos" abre la galería; "Archivo del celu", el selector de archivos (descargas, otras carpetas).
+ */
+@Composable
+private fun CastKey(casting: Boolean, size: Dp, onPick: (Uri) -> Unit, onStop: () -> Unit) {
+    val context = LocalContext.current
+    var menu by remember { mutableStateOf(false) }
+    var pending by rememberSaveable { mutableStateOf<Uri?>(null) }
+    // La notificación con "Detener" necesita permiso desde Android 13. Se transmite igual si dicen que no.
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        pending?.let(onPick)
+        pending = null
+    }
+
+    fun picked(uri: Uri?) {
+        if (uri == null) return
+        // Persistente: si la app se cierra a mitad de una peli, el archivo se sigue pudiendo leer.
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        val needsPermission = Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (needsPermission) {
+            pending = uri
+            notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            onPick(uri)
+        }
+    }
+
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked(it) }
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked(it) }
+
+    Box {
+        RoundKey(
+            R.drawable.ic_cast, "Transmitir a la tele", { menu = true },
+            size = size, hold = Hold.None,
+            tint = if (casting) Palette.Accent else Palette.Text,
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("Fotos y videos") },
+                onClick = {
+                    menu = false
+                    gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Archivo del celu") },
+                onClick = {
+                    menu = false
+                    files.launch(arrayOf("video/*", "image/*", "audio/*"))
+                },
+            )
+            if (casting) {
+                DropdownMenuItem(
+                    text = { Text("Dejar de transmitir") },
+                    onClick = {
+                        menu = false
+                        onStop()
+                    },
+                )
+            }
         }
     }
 }
