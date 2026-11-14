@@ -107,6 +107,7 @@ class FakeTvTest {
         assertEquals(19, key.int(1))
         assertEquals(3, key.int(2))
 
+        assertTrue(client.textFieldOpen) // la tele avisó un campo enfocado (contadores 5 y 7)
         client.sendText("hola")
         val ime = tv.nextReceived().message(21)!!
         assertEquals(5, ime.int(1)) // contadores tomados de ime_key_inject
@@ -167,6 +168,30 @@ class FakeTvTest {
             tv.dropSessions()
             withTimeout(10_000) { connection.state.first { it !is TvState.Conectado } }
             withTimeout(10_000) { connection.state.first { it is TvState.Conectado } }
+        } finally {
+            connection.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun manyRestartsLeaveASingleSession() = runBlocking<Unit> {
+        val fingerprint = pair()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val connection = TvConnection(phoneCerts, log, scope, tv.controlPort)
+        try {
+            connection.start()
+            // Muchos reinicios seguidos (como al guardar la vinculación): no puede quedar ninguna sesión huérfana.
+            repeat(40) { i ->
+                connection.setTarget(TvConnection.Target(if (i % 2 == 0) "127.0.0.1" else "localhost", fingerprint))
+                Thread.sleep((i % 4).toLong())
+            }
+            withTimeout(10_000) { connection.state.first { it is TvState.Conectado } }
+            Thread.sleep(1500)
+            assertEquals(1, tv.openSessions())
+            connection.stop()
+            Thread.sleep(500)
+            assertEquals(0, tv.openSessions())
         } finally {
             connection.stop()
             scope.cancel()

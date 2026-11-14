@@ -51,6 +51,14 @@ class RemoteClient(
     private var hasFieldCounter = false
 
     /**
+     * ¿La tele avisó que hay un campo de texto abierto? Si no, el texto se ignora y un Enter
+     * "tocaría" lo que esté seleccionado en pantalla.
+     */
+    @Volatile
+    var textFieldOpen = false
+        private set
+
+    /**
      * Conecta y atiende la sesión hasta que se corta. Siempre termina con una excepción:
      * [NeedsPairingException] si la tele no reconoce al celu, IOException si se cortó.
      */
@@ -84,7 +92,7 @@ class RemoteClient(
                     throw e
                 }
                 receivedAny = true
-                handle(Remote.parse(raw))
+                handle(Remote.parse(raw), raw)
             }
         } catch (e: SocketTimeoutException) {
             throw IOException("Pasaron 16 s sin noticias de la tele", e)
@@ -107,7 +115,7 @@ class RemoteClient(
         runCatching { socket?.close() }
     }
 
-    private fun handle(event: RemoteEvent) {
+    private fun handle(event: RemoteEvent, raw: ByteArray) {
         when (event) {
             is RemoteEvent.Configure -> {
                 activeFeatures = Features.REQUESTED and event.features
@@ -142,6 +150,7 @@ class RemoteClient(
                 fieldCounter = event.fieldCounter
                 hasImeCounter = event.imeCounter != 0
                 hasFieldCounter = event.fieldCounter != 0
+                textFieldOpen = event.imeCounter != 0 || event.fieldCounter != 0
             }
             is RemoteEvent.ImeShowRequest -> {
                 log.log("← ime_show_request: campo ${event.fieldCounter ?: "?"}")
@@ -149,18 +158,23 @@ class RemoteClient(
                     fieldCounter = it
                     hasFieldCounter = true
                 }
+                textFieldOpen = true
             }
             is RemoteEvent.ImeBatchEdit -> {
                 log.log("← ime_batch_edit: ime ${event.imeCounter}, campo ${event.fieldCounter}")
                 if (!hasImeCounter) imeCounter = event.imeCounter
                 if (!hasFieldCounter) fieldCounter = event.fieldCounter
+                textFieldOpen = true
             }
             is RemoteEvent.Volume -> {
                 log.log("← volumen ${event.level}/${event.max}${if (event.muted) " (silencio)" else ""}")
                 listener.onVolumeChanged(VolumeInfo(event.level, event.max, event.muted))
             }
             is RemoteEvent.Error -> log.log("← remote_error (campos del mensaje rechazado: ${event.fields})")
-            is RemoteEvent.Other -> log.log("← mensaje sin manejar (campos ${event.fields})")
+            is RemoteEvent.Other -> log.log(
+                "← mensaje sin manejar (campos ${event.fields}): " +
+                    raw.take(48).joinToString(" ") { "%02x".format(it) } + if (raw.size > 48) " …" else "",
+            )
         }
     }
 

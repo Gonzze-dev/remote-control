@@ -101,6 +101,7 @@ object AppNames {
         "com.google.android.tvlauncher" to "Inicio",
         "com.android.tv.settings" to "Configuración",
         "com.google.android.katniss" to "Asistente",
+        "com.google.android.apps.tv.dreamx" to "Protector de pantalla",
         "com.google.android.videos" to "Google TV",
     )
 

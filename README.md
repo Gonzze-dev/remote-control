@@ -17,12 +17,13 @@ gradlew testDebugUnitTest    → pruebas + capturas de pantalla
 
 ## Probar sin la tele
 
-`gradlew testDebugUnitTest` corre 33 pruebas:
+`gradlew testDebugUnitTest` corre 34 pruebas:
 
 - **ProtocolTest**: bytes exactos de cada mensaje, el secreto de vinculación y el certificado.
 - **FakeTvTest**: una tele de mentira con TLS de verdad (`FakeTv.kt`). Prueba la vinculación con el
   código, el código mal tipeado, la sesión de control (teclas, texto, apps, ping, volumen),
-  el celu desconocido, la huella cambiada y la reconexión.
+  el celu desconocido, la huella cambiada, la reconexión y que muchos reinicios seguidos no
+  dejen sesiones abiertas de más.
 - **ScreenshotTest**: genera las capturas de `docs/diseno/` (quedan en `app/build/outputs/roborazzi/`).
 
 ## Diseño
@@ -63,13 +64,35 @@ Las 13 pantallas están en [docs/diseno](docs/diseno).
 - **"Hay que vincular de nuevo"**: si la huella de la tele no coincide, se pide enseguida. Si la
   tele corta el TLS, se espera a 3 cortes seguidos: según el momento, el rechazo llega como alerta
   TLS o como "conexión abortada", y así un corte casual no manda a vincular sin motivo.
-- El volumen se ve solo en la línea de estado (el balancín no lo repite).
+- El volumen se ve solo en la línea de estado (el balancín no lo repite). Si la tele no informa
+  un nivel (por ejemplo, el Chromecast manejando el volumen de la tele por HDMI manda `0/0`),
+  no se muestra ningún número.
+- **Enter después del texto, solo con un campo abierto**: si la tele no avisó un campo de texto,
+  el texto se manda igual pero sin Enter, porque el Enter "tocaría" lo que esté seleccionado
+  en pantalla (en la prueba real abrió Prime Video desde Inicio).
 
-## Lo que falta probar con la tele real
+## Probado con la tele real
 
-- Que la tele acepte el certificado y el secreto (contra la tele de mentira anda).
-- El texto en apps reales y el modo "en vivo" (experimental).
-- Qué links de la lista de apps abren bien en tu Chromecast.
-- El permiso de red local en un celu con Android 17.
+13/11/2026 · Chromecast con Google TV en una tele Sony · Galaxy S25 Ultra con Android 17.
+
+| Qué | Resultado |
+|---|---|
+| Permiso de red local (Android 17) | ✅ |
+| Vinculación con el código | ✅ |
+| Conexión, pings y reconexión al volver a la app | ✅ |
+| Flechas, OK, Atrás, Inicio, borrar y Enter | ✅ |
+| Volumen, silencio y play/pausa | Salen sin errores; falta verlos en pantalla |
+| Abrir apps por link (YouTube) | ✅ |
+| Texto al enviar, en el buscador de Google TV | ✅ |
+| Texto en vivo (letra por letra y borrados) | ✅ |
+
+Lo que se aprendió:
+
+- La tele avisa un campo de texto abierto con `ime_key_inject` y contadores distintos de 0, y
+  después de cada cambio manda `ime_show_request` con el contador de campo nuevo.
+- Sin campo abierto, los contadores llegan en 0 y el texto se ignora.
+- Hay un mensaje que no figura en los `.proto` de referencia (campo 24). El log muestra sus bytes
+  para poder descifrarlo.
+- Falta probar el resto de los links de la lista de apps y el encendido.
 
 Si algo falla, Ajustes → Log de conexión muestra cada mensaje que va y viene, y se puede copiar.

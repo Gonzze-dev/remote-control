@@ -249,7 +249,10 @@ fun StatusHeader(
             )
         }
         when (state) {
-            is TvState.Conectado -> state.volumen?.let { VolumeChip(it.level, it.muted) }
+            // Si el Chromecast maneja el volumen de la tele por HDMI, informa 0/0: no hay nivel que mostrar.
+            is TvState.Conectado -> state.volumen?.takeIf { it.max > 0 || it.muted }?.let {
+                VolumeChip(it.level.takeIf { _ -> it.max > 0 }, it.muted)
+            }
             is TvState.Desconectado -> TextButton(onClick = onRetry) { Text("Reintentar") }
             is TvState.HayQueVincular -> Button(
                 onClick = onRepair,
@@ -292,7 +295,7 @@ private fun StatusDot(color: Color, pulsing: Boolean) {
 }
 
 @Composable
-private fun VolumeChip(level: Int, muted: Boolean) {
+private fun VolumeChip(level: Int?, muted: Boolean) {
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
@@ -306,7 +309,9 @@ private fun VolumeChip(level: Int, muted: Boolean) {
             tint = if (muted) Palette.Red else Palette.TextMuted,
             modifier = Modifier.size(16.dp),
         )
-        Spacer(Modifier.width(4.dp))
-        Text(level.toString(), style = MaterialTheme.typography.labelLarge, color = Palette.Text)
+        if (level != null) {
+            Spacer(Modifier.width(4.dp))
+            Text(level.toString(), style = MaterialTheme.typography.labelLarge, color = Palette.Text)
+        }
     }
 }

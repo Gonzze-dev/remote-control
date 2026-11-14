@@ -143,6 +143,9 @@ class FakeTv(dir: File) : Closeable {
         sessions.clear()
     }
 
+    /** Sesiones de control abiertas ahora mismo. */
+    fun openSessions(): Int = sessions.count { !it.isClosed }
+
     fun nextReceived(): ProtoMessage = received.poll(10, TimeUnit.SECONDS) ?: error("la tele no recibió nada")
 
     override fun close() {

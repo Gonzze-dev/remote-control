@@ -62,6 +62,11 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
             toast("Sin conexión con la tele: no se mandó el texto")
             return false
         }
+        if (!connection.textFieldOpen()) {
+            // Sin campo de texto la tele ignora el texto, y un Enter "tocaría" lo que esté seleccionado.
+            toast("La tele no tiene un campo de texto abierto: abrí el buscador primero")
+            return true
+        }
         if (settings.value?.enterAfterText == true) {
             viewModelScope.launch {
                 delay(150) // que la tele termine de escribir antes de buscar

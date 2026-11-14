@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.EOFException
@@ -55,6 +56,9 @@ class TvConnection(
     private var job: Job? = null
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
+    /** Cuida que una sesión que se estaba abriendo al cancelar no quede viva por su cuenta. */
+    private val lock = Any()
+
     /** Los comandos salen de a uno y en orden. */
     private val writer = Dispatchers.IO.limitedParallelism(1)
 
@@ -82,15 +86,16 @@ class TvConnection(
         if (job?.isActive == true) wake.trySend(Unit) else if (running) launchLoop()
     }
 
-    /** Arrancar de cero (por ejemplo, después de vincular). */
-    fun reconnect() {
-        if (running) restart()
-    }
+    /** Después de vincular: si el bucle terminó (por ejemplo, en "hay que vincular"), lo vuelve a lanzar. */
+    fun reconnect() = retryNow()
 
     fun sendKey(keyCode: Int, direction: Direction = Direction.SHORT): Boolean =
         dispatch("tecla ${Keys.name(keyCode)}") { it.sendKey(keyCode, direction) }
 
     fun sendText(text: String): Boolean = dispatch("texto") { it.sendText(text) }
+
+    /** ¿La tele tiene un campo de texto abierto ahora? */
+    fun textFieldOpen(): Boolean = client?.textFieldOpen == true
 
     fun launchApp(appLink: String): Boolean = dispatch("abrir $appLink") { it.launchApp(appLink) }
 
@@ -116,7 +121,7 @@ class TvConnection(
         launchLoop()
     }
 
-    private fun cancelLoop() {
+    private fun cancelLoop() = synchronized(lock) {
         job?.cancel()
         job = null
         client?.close()
@@ -150,7 +155,12 @@ class TvConnection(
             val listener = SessionListener()
             val c = RemoteClient(t.host, identity, t.fingerprint, log, listener, port)
             listener.owner = c
-            client = c
+            val myJob = currentCoroutineContext().job
+            synchronized(lock) {
+                // Si cancelaron este bucle mientras se preparaba, no se abre otra sesión.
+                if (!myJob.isActive) return
+                client = c
+            }
 
             val reason: String = try {
                 c.run()
