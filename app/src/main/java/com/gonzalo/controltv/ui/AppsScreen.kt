@@ -120,7 +120,8 @@ fun AppsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.weight(1f),
         ) {
-            if (connected && currentPkg != null) {
+            // Solo cuando sirve: una app que no está en la lista y no es una pantalla del sistema.
+            if (connected && currentPkg != null && !currentInList && !AppNames.isSystem(currentPkg)) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     NowOnScreenCard(
                         label = AppNames.label(currentPkg, apps),

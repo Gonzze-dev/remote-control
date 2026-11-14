@@ -105,6 +105,11 @@ object AppNames {
         "com.google.android.videos" to "Google TV",
     )
 
+    /** Pantallas del sistema (Inicio, Configuración, protector…): no tiene sentido agregarlas a la lista. */
+    fun isSystem(pkg: String): Boolean =
+        pkg.startsWith("com.android.") || pkg.startsWith("com.google.android.apps.tv.") ||
+            pkg in setOf("com.google.android.tvlauncher", "com.google.android.leanbacklauncher", "com.google.android.katniss", "com.google.android.backdrop")
+
     fun label(pkg: String, apps: List<TvApp>): String =
         apps.firstOrNull { it.pkg == pkg }?.name ?: known[pkg] ?: fromPackage(pkg)
 
