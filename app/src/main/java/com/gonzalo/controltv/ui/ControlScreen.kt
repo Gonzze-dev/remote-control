@@ -10,7 +10,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.Dp
 import androidx.core.content.ContextCompat
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -127,7 +126,14 @@ fun ControlScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        StatusHeader(state, appLabel, settings.ip, onOpenSettings, actions::retry, onRepair)
+        StatusHeader(state, appLabel, settings.ip, onOpenSettings, actions::retry, onRepair) {
+            // La tecla de configuración del control: abre el panel rápido de Google TV.
+            // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
+            IconButton(onClick = { actions.key(Keys.SETTINGS) }) {
+                Icon(painterResource(R.drawable.ic_tune), "Panel rápido", tint = Palette.TextMuted)
+            }
+            CastKey(casting, actions::castMedia, actions::stopCasting)
+        }
 
         BoxWithConstraints(
             Modifier
@@ -143,7 +149,7 @@ fun ControlScreen(
             } else {
                 min(min(maxWidth * 0.7f, maxHeight - 12.dp), 300.dp)
             }.coerceAtLeast(120.dp)
-            // Las filas son un poco más anchas que el pad, para que el volumen entre junto a tres botones.
+            // Las filas son un poco más anchas que el pad, para que el volumen tenga lugar junto a sus dos botones.
             val clusterWidth = maxOf(padSize + 48.dp, 300.dp).coerceAtMost(maxWidth)
             // En pantallas altas, el aire sobrante se reparte entre las filas en vez de quedar todo arriba y abajo.
             val gap = ((maxHeight - padSize - 64.dp - 56.dp) / 4).coerceIn(28.dp, 44.dp)
@@ -173,8 +179,6 @@ fun ControlScreen(
                             border = if (poweredOff) Palette.Red.copy(alpha = 0.5f) else Palette.OutlineSoft,
                         )
                     }
-                    // Volumen y cuatro botones: los botones se achican un poco antes que el balancín.
-                    val smallKey = ((clusterWidth - 96.dp - 8.dp * 4) / 4).coerceIn(44.dp, 56.dp)
                     Row(
                         Modifier.width(clusterWidth),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -183,18 +187,14 @@ fun ControlScreen(
                         VolumeRocker(
                             onDown = { actions.key(Keys.VOLUME_DOWN) },
                             onUp = { actions.key(Keys.VOLUME_UP) },
-                            width = clusterWidth - smallKey * 4 - 8.dp * 4,
+                            width = clusterWidth - 56.dp * 2 - 24.dp * 2,
                         )
                         RoundKey(
                             R.drawable.ic_volume_off, "Silencio", { actions.key(Keys.VOLUME_MUTE) },
-                            size = smallKey, hold = Hold.None,
+                            size = 56.dp, hold = Hold.None,
                             tint = if (volume?.muted == true) Palette.Red else Palette.Text,
                         )
-                        RoundKey(R.drawable.ic_play_pause, "Play o pausa", { actions.key(Keys.MEDIA_PLAY_PAUSE) }, size = smallKey, hold = Hold.None)
-                        // La tecla de configuración del control: abre el panel rápido de Google TV.
-                        // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
-                        RoundKey(R.drawable.ic_tune, "Panel rápido", { actions.key(Keys.SETTINGS) }, size = smallKey, hold = Hold.None)
-                        CastKey(casting, smallKey, actions::castMedia, actions::stopCasting)
+                        RoundKey(R.drawable.ic_play_pause, "Play o pausa", { actions.key(Keys.MEDIA_PLAY_PAUSE) }, size = 56.dp, hold = Hold.None)
                     }
                 }
             }
@@ -233,7 +233,7 @@ fun ControlScreen(
     }
 }
 
-/** Línea de estado: punto de conexión, app en pantalla, volumen y Ajustes. */
+/** Línea de estado: punto de conexión, app en pantalla, volumen, [extra] (Panel rápido, Transmitir) y Ajustes. */
 @Composable
 fun StatusHeader(
     state: TvState,
@@ -242,6 +242,7 @@ fun StatusHeader(
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
     onRepair: () -> Unit,
+    extra: @Composable () -> Unit = {},
 ) {
     val (dot, title, subtitle) = when (state) {
         is TvState.Conectado ->
@@ -288,6 +289,7 @@ fun StatusHeader(
             ) { Text("Vincular") }
             is TvState.Conectando -> Unit
         }
+        extra()
         IconButton(onClick = onOpenSettings) {
             Icon(painterResource(R.drawable.ic_settings), "Ajustes", tint = Palette.TextMuted)
         }
@@ -347,7 +349,7 @@ private fun VolumeChip(level: Int?, muted: Boolean) {
  * "Fotos y videos" abre la galería; "Archivo del celu", el selector de archivos (descargas, otras carpetas).
  */
 @Composable
-private fun CastKey(casting: Boolean, size: Dp, onPick: (Uri) -> Unit, onStop: () -> Unit) {
+private fun CastKey(casting: Boolean, onPick: (Uri) -> Unit, onStop: () -> Unit) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var pending by rememberSaveable { mutableStateOf<Uri?>(null) }
@@ -375,11 +377,12 @@ private fun CastKey(casting: Boolean, size: Dp, onPick: (Uri) -> Unit, onStop: (
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { picked(it) }
 
     Box {
-        RoundKey(
-            R.drawable.ic_cast, "Transmitir a la tele", { menu = true },
-            size = size, hold = Hold.None,
-            tint = if (casting) Palette.Accent else Palette.Text,
-        )
+        IconButton(onClick = { menu = true }) {
+            Icon(
+                painterResource(R.drawable.ic_cast), "Transmitir a la tele",
+                tint = if (casting) Palette.Accent else Palette.TextMuted,
+            )
+        }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(
                 text = { Text("Fotos y videos") },

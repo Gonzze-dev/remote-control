@@ -45,9 +45,9 @@ Oscuro, porque se usa de noche frente a la tele: fondo grafito y un solo color d
 | Acento (OK, enviar, selección) | `#FF9F45` |
 | Conectado / error | `#3DDC97` · `#FF5E5E` |
 
-- **Control**: línea de estado arriba (punto de conexión, app en pantalla, volumen, Ajustes).
-  En el medio, el pad circular con el OK ámbar como protagonista; abajo, Atrás · Inicio ·
-  Encendido y, más abajo, volumen · silencio · play/pausa · panel rápido · transmitir. La barra de texto queda cerca del
+- **Control**: línea de estado arriba (punto de conexión, app en pantalla, volumen, Panel rápido,
+  Transmitir y Ajustes). En el medio, el pad circular con el OK ámbar como protagonista; abajo, Atrás · Inicio ·
+  Encendido y, más abajo, volumen · silencio · play/pausa. La barra de texto queda cerca del
   pulgar: el campo y el micrófono (borrar y mandar se hacen con el teclado del celu). Si el
   teclado ocupa la pantalla, se esconden las filas y queda el pad.
 - **Apps**: grilla de tarjetas con el ícono de cada app. El ícono oficial se baja una vez de
