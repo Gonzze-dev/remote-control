@@ -64,7 +64,7 @@ class AppsRepository(context: Context) {
             TvApp("plex", "Plex", "plex://", "com.plexapp.android"),
             TvApp("twitch", "Twitch", "twitch://home", "tv.twitch.android.app"),
             TvApp("spotify", "Spotify", "spotify://", "com.spotify.tv.android"),
-            TvApp("crunchyroll", "Crunchyroll", "crunchyroll://"),
+            TvApp("crunchyroll", "Crunchyroll", "crunchyroll://", "com.crunchyroll.crunchyroid"),
             TvApp("kodi", "Kodi", TvApp.marketLink("org.xbmc.kodi"), "org.xbmc.kodi"),
         )
 

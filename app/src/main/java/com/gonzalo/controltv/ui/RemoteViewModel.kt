@@ -1,6 +1,8 @@
 package com.gonzalo.controltv.ui
 
 import android.app.Application
+import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gonzalo.controltv.App
@@ -13,6 +15,7 @@ import com.gonzalo.controltv.tv.TvState
 import com.gonzalo.controltv.tv.WrongCodeException
 import com.gonzalo.controltv.tv.describeNetworkError
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,12 +41,21 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     val settings: StateFlow<AppSettings?> = app.settings.flow.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val apps: StateFlow<List<TvApp>> = app.apps.apps.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val logLines = app.log.lines
+    val icons: StateFlow<Map<String, ImageBitmap>> = app.icons.icons
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     private fun toast(text: String) {
         _messages.tryEmit(text)
+    }
+
+    init {
+        // Cada vez que cambia la lista o la app en pantalla, se buscan los íconos que falten.
+        viewModelScope.launch {
+            combine(apps, state.map { (it as? TvState.Conectado)?.app }.distinctUntilChanged()) { list, pkg -> list to pkg }
+                .collectLatest { (list, pkg) -> app.icons.ensure(list, pkg) }
+        }
     }
 
     // ---- Control ----
@@ -56,32 +72,66 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         connection.sendKey(code, Direction.END_LONG)
     }
 
+    // Google TV abre el buscador cuando le llega texto sin un campo abierto, pero ese primer
+    // texto se pierde. Entonces se espera a que avise el campo y se manda de nuevo.
+    private var waitingForField: Job? = null
+    private var pendingText = ""
+    private var pendingEnter = false
+
     override fun sendText(text: String): Boolean {
         if (text.isEmpty()) return false
+        val enter = settings.value?.enterAfterText == true
+        val fieldOpen = connection.textFieldOpen()
         if (!connection.sendText(text)) {
             toast("Sin conexión con la tele: no se mandó el texto")
             return false
         }
-        if (!connection.textFieldOpen()) {
-            // Sin campo de texto la tele ignora el texto, y un Enter "tocaría" lo que esté seleccionado.
-            toast("La tele no tiene un campo de texto abierto: abrí el buscador primero")
-            return true
-        }
-        if (settings.value?.enterAfterText == true) {
-            viewModelScope.launch {
-                delay(150) // que la tele termine de escribir antes de buscar
-                connection.sendKey(Keys.ENTER)
+        if (fieldOpen) {
+            if (enter) {
+                viewModelScope.launch {
+                    delay(150) // que la tele termine de escribir antes de buscar
+                    connection.sendKey(Keys.ENTER)
+                }
             }
+        } else {
+            // Sin campo abierto, un Enter ahora "tocaría" lo que esté seleccionado en pantalla.
+            sendWhenFieldOpens(text, enter)
         }
         return true
     }
 
     /** Modo en vivo: manda solo la diferencia (borra con DEL lo que sobra y agrega lo nuevo). */
     override fun liveEdit(old: String, new: String) {
+        if (waitingForField?.isActive == true) {
+            pendingText = new // se manda todo junto cuando la tele abra el campo
+            return
+        }
+        if (!connection.textFieldOpen()) {
+            if (new.isNotEmpty() && connection.sendText(new)) sendWhenFieldOpens(new, enter = false)
+            return
+        }
         val common = old.commonPrefixWith(new).length
         repeat(old.length - common) { connection.sendKey(Keys.DEL) }
         val added = new.substring(common)
         if (added.isNotEmpty()) connection.sendText(added)
+    }
+
+    private fun sendWhenFieldOpens(text: String, enter: Boolean) {
+        pendingText = text
+        pendingEnter = enter
+        waitingForField?.cancel()
+        waitingForField = viewModelScope.launch {
+            if (!connection.awaitTextField(FIELD_WAIT_MS)) {
+                toast("La tele no abrió un campo de texto: abrí el buscador y probá de nuevo")
+                return@launch
+            }
+            delay(250) // que el buscador termine de abrirse
+            if (pendingText.isNotEmpty()) connection.sendText(pendingText)
+            if (pendingEnter) {
+                delay(150)
+                connection.sendKey(Keys.ENTER)
+            }
+        }
     }
 
     override fun retry() = connection.retryNow()
@@ -101,8 +151,17 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
 
     fun deleteApp(tvApp: TvApp) {
         viewModelScope.launch { app.apps.delete(tvApp.id) }
+        app.icons.removeCustom(tvApp.id)
         toast("Se borró ${tvApp.name}")
     }
+
+    fun setAppImage(appId: String, uri: Uri) {
+        viewModelScope.launch {
+            if (!app.icons.setCustom(appId, uri)) toast("No se pudo usar esa imagen")
+        }
+    }
+
+    fun removeAppImage(appId: String) = app.icons.removeCustom(appId)
 
     // ---- Ajustes ----
 
@@ -250,6 +309,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     }
 
     companion object {
+        /** Cuánto se espera a que la tele abra el buscador después de recibir texto. */
+        private const val FIELD_WAIT_MS = 2_500L
         private val HOST = Regex("^[A-Za-z0-9.:\\-]{1,253}$")
 
         fun isValidHost(host: String): Boolean {

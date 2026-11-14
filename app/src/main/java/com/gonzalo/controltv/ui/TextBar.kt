@@ -39,8 +39,8 @@ import com.gonzalo.controltv.R
 import com.gonzalo.controltv.ui.theme.Palette
 
 /**
- * Barra de texto: campo + borrar + micrófono + enviar. En modo "en vivo" cada letra se
- * manda al toque y el botón de enviar pasa a ser Enter.
+ * Barra de texto: campo + micrófono. Se manda con la tecla de acción del teclado; en modo
+ * "en vivo" cada letra (y cada borrado) va al toque y esa tecla da Enter en la tele.
  */
 @Composable
 fun TextBar(
@@ -49,7 +49,6 @@ fun TextBar(
     live: Boolean,
     placeholder: String,
     onSend: () -> Unit,
-    onBackspace: () -> Unit,
     onMic: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -85,10 +84,10 @@ fun TextBar(
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.Text),
             cursorBrush = SolidColor(Palette.Accent),
             keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Send,
+                imeAction = if (live) ImeAction.Search else ImeAction.Send,
                 autoCorrectEnabled = !live, // en vivo, el autocorrector reescribiría lo que ya se mandó
             ),
-            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            keyboardActions = KeyboardActions(onSend = { onSend() }, onSearch = { onSend() }),
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
                 Box(contentAlignment = Alignment.CenterStart) {
@@ -105,17 +104,8 @@ fun TextBar(
                 }
             },
         )
-        BarKey(R.drawable.ic_backspace, "Borrar en la tele", Hold.Repeat, onBackspace)
+        // Borrar y enviar se hacen con el teclado del celu: la tecla de acción manda (o da Enter en vivo).
         BarKey(R.drawable.ic_mic, "Dictar por voz", Hold.None, onMic)
-        val canSend = live || text.isNotBlank()
-        BarKey(
-            icon = if (live) R.drawable.ic_keyboard_return else R.drawable.ic_send,
-            label = if (live) "Enter" else "Mandar texto",
-            hold = Hold.None,
-            onTap = { if (canSend) onSend() },
-            container = if (canSend) Palette.Accent else Color.Transparent,
-            tint = if (canSend) Palette.OnAccent else Palette.TextFaint,
-        )
     }
 }
 

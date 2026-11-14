@@ -11,6 +11,7 @@ import java.io.OutputStream
 object Framing {
     /** Ningún mensaje del protocolo se acerca a esto; si llega algo así, el stream está roto. */
     private const val MAX_MESSAGE = 1 shl 20
+    private const val NONE = Int.MIN_VALUE
 
     fun write(out: OutputStream, message: ByteArray) {
         val frame = ByteArrayOutputStream(message.size + 5)
@@ -25,12 +26,27 @@ object Framing {
         out.flush()
     }
 
-    /** Bloquea hasta leer un mensaje completo. */
-    fun read(input: InputStream): ByteArray {
+    /**
+     * Bloquea hasta leer un mensaje completo. Si el socket tiene timeout y se vence antes de
+     * que llegue el primer byte (no se leyó nada todavía), se llama a [onWaiting] y se sigue
+     * esperando; [onWaiting] puede tirar una excepción para cortar.
+     */
+    fun read(input: InputStream, onWaiting: (() -> Unit)? = null): ByteArray {
+        var first: Int
+        while (true) {
+            try {
+                first = input.read()
+                break
+            } catch (e: java.net.SocketTimeoutException) {
+                if (onWaiting == null) throw e
+                onWaiting()
+            }
+        }
         var len = 0
         var shift = 0
+        var pending = first
         while (true) {
-            val b = input.read()
+            val b = if (pending != NONE) pending.also { pending = NONE } else input.read()
             if (b < 0) throw EOFException("La tele cerró la conexión")
             len = len or ((b and 0x7F) shl shift)
             if (b and 0x80 == 0) break

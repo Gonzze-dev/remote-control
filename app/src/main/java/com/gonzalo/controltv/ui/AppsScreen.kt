@@ -1,6 +1,11 @@
 package com.gonzalo.controltv.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +52,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.painterResource
@@ -57,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gonzalo.controltv.R
+import com.gonzalo.controltv.data.AppIcons
 import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.TvApp
 import com.gonzalo.controltv.ui.theme.Palette
@@ -72,6 +80,9 @@ fun AppsScreen(
     onSave: (TvApp) -> Unit,
     onDelete: (TvApp) -> Unit,
     onOpenSettings: () -> Unit,
+    icons: Map<String, ImageBitmap> = emptyMap(),
+    onSetImage: (appId: String, image: Uri) -> Unit = { _, _ -> },
+    onRemoveImage: (appId: String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var editing by remember { mutableStateOf<TvApp?>(null) }
@@ -113,6 +124,8 @@ fun AppsScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     NowOnScreenCard(
                         label = AppNames.label(currentPkg, apps),
+                        icon = apps.firstOrNull { it.pkg == currentPkg }?.let { AppIcons.iconFor(it, icons) }
+                            ?: icons[AppIcons.pkgKey(currentPkg)],
                         pkg = currentPkg,
                         inList = currentInList,
                         onAdd = {
@@ -128,6 +141,7 @@ fun AppsScreen(
             items(apps, key = { it.id }) { app ->
                 AppCard(
                     app = app,
+                    icon = AppIcons.iconFor(app, icons),
                     isOpen = connected && app.pkg.isNotBlank() && app.pkg == currentPkg,
                     onClick = { onOpen(app) },
                     onLongClick = { menuFor = app },
@@ -147,7 +161,7 @@ fun AppsScreen(
         ) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp).navigationBarsPadding()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AppInitial(app.name, 44.dp)
+                    AppIcon(app.name, AppIcons.iconFor(app, icons), 44.dp)
                     Spacer(Modifier.width(14.dp))
                     Column {
                         Text(app.name, style = MaterialTheme.typography.titleMedium)
@@ -168,6 +182,9 @@ fun AppsScreen(
         AppDialog(
             initial = app,
             isNew = editing == null,
+            icons = icons,
+            onSetImage = onSetImage,
+            onRemoveImage = onRemoveImage,
             onDismiss = { editing = null; creating = null },
             onSave = { onSave(it); editing = null; creating = null },
         )
@@ -176,13 +193,13 @@ fun AppsScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppCard(app: TvApp, isOpen: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun AppCard(app: TvApp, icon: ImageBitmap?, isOpen: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val shape = RoundedCornerShape(20.dp)
     Box(
         Modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .height(120.dp)
             .clip(shape)
             .background(if (isOpen) Palette.AccentContainer else Palette.SurfaceHigh)
             .border(if (isOpen) 1.5.dp else 1.dp, if (isOpen) Palette.Accent else Palette.OutlineSoft, shape)
@@ -202,7 +219,7 @@ private fun AppCard(app: TvApp, isOpen: Boolean, onClick: () -> Unit, onLongClic
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            AppInitial(app.name, 46.dp)
+            AppIcon(app.name, icon, 56.dp)
             Spacer(Modifier.height(10.dp))
             Text(
                 app.name,
@@ -231,7 +248,7 @@ private fun AddCard(onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .height(120.dp)
             .clip(shape)
             .border(1.dp, Palette.Outline, shape)
             .clickable(onClick = onClick),
@@ -245,7 +262,7 @@ private fun AddCard(onClick: () -> Unit) {
 }
 
 @Composable
-private fun NowOnScreenCard(label: String, pkg: String, inList: Boolean, onAdd: () -> Unit) {
+private fun NowOnScreenCard(label: String, icon: ImageBitmap?, pkg: String, inList: Boolean, onAdd: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Row(
         Modifier
@@ -256,7 +273,7 @@ private fun NowOnScreenCard(label: String, pkg: String, inList: Boolean, onAdd: 
             .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppInitial(label, 40.dp)
+        AppIcon(label, icon, 44.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("EN PANTALLA", fontSize = 10.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold, color = Palette.Accent)
@@ -273,9 +290,24 @@ private fun NowOnScreenCard(label: String, pkg: String, inList: Boolean, onAdd: 
     }
 }
 
-/** Inicial con un color que sale del nombre (siempre el mismo para la misma app). */
+/**
+ * Ícono de la app: la imagen (de Google Play o elegida) o, si no hay, una inicial con un
+ * color que sale del nombre (siempre el mismo para la misma app).
+ */
 @Composable
-fun AppInitial(name: String, size: androidx.compose.ui.unit.Dp) {
+fun AppIcon(name: String, icon: ImageBitmap?, size: androidx.compose.ui.unit.Dp) {
+    val shape = RoundedCornerShape(size * 0.24f)
+    if (icon != null) {
+        Image(
+            bitmap = icon,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(size)
+                .clip(shape),
+        )
+        return
+    }
     val colors = listOf(
         Color(0xFFE5484D), Color(0xFF3E63DD), Color(0xFF30A46C), Color(0xFFF76B15), Color(0xFF8E4EC6),
         Color(0xFF12A594), Color(0xFFD6409F), Color(0xFF0090FF), Color(0xFFBF7AF0), Color(0xFF46A758),
@@ -285,7 +317,7 @@ fun AppInitial(name: String, size: androidx.compose.ui.unit.Dp) {
     Box(
         Modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(shape)
             .background(bg),
         contentAlignment = Alignment.Center,
     ) {
@@ -315,11 +347,24 @@ private fun SheetAction(@DrawableRes icon: Int, label: String, tint: Color = Pal
 }
 
 @Composable
-private fun AppDialog(initial: TvApp, isNew: Boolean, onDismiss: () -> Unit, onSave: (TvApp) -> Unit) {
+private fun AppDialog(
+    initial: TvApp,
+    isNew: Boolean,
+    icons: Map<String, ImageBitmap>,
+    onSetImage: (String, Uri) -> Unit,
+    onRemoveImage: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (TvApp) -> Unit,
+) {
     var name by rememberSaveable { mutableStateOf(initial.name) }
     var link by rememberSaveable { mutableStateOf(initial.link) }
     var pkg by rememberSaveable { mutableStateOf(initial.pkg) }
     val valid = name.isNotBlank() && (link.isNotBlank() || pkg.isNotBlank())
+    // La imagen elegida se guarda al toque (con el id de la app), así se ve en la vista previa.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) onSetImage(initial.id, uri)
+    }
+    val hasCustom = AppIcons.customKey(initial.id) in icons
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -327,6 +372,22 @@ private fun AppDialog(initial: TvApp, isNew: Boolean, onDismiss: () -> Unit, onS
         title = { Text(if (isNew) "Agregar app" else "Editar app") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AppIcon(name.ifBlank { "?" }, AppIcons.iconFor(initial.copy(pkg = pkg), icons), 56.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        TextButton(
+                            onClick = {
+                                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                        ) { Text("Elegir imagen") }
+                        if (hasCustom) {
+                            TextButton(onClick = { onRemoveImage(initial.id) }) {
+                                Text("Usar la de Google Play", color = Palette.TextMuted)
+                            }
+                        }
+                    }
+                }
                 OutlinedTextField(name, { name = it }, label = { Text("Nombre") }, singleLine = true)
                 OutlinedTextField(
                     link, { link = it.trim() },

@@ -190,7 +190,6 @@ fun ControlScreen(
                     send(text)
                 }
             },
-            onBackspace = { actions.key(Keys.DEL) },
             onMic = {
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                     .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import com.gonzalo.controltv.data.AppIcons
 import com.gonzalo.controltv.data.AppsRepository
 import com.gonzalo.controltv.data.ConnectionLog
 import com.gonzalo.controltv.data.Settings
@@ -26,6 +27,8 @@ class App : Application() {
         private set
     lateinit var certs: CertManager
         private set
+    lateinit var icons: AppIcons
+        private set
     lateinit var connection: TvConnection
         private set
 
@@ -34,6 +37,7 @@ class App : Application() {
         settings = Settings(this)
         apps = AppsRepository(this)
         certs = CertManager(filesDir)
+        icons = AppIcons(this)
         connection = TvConnection(certs, log, scope)
 
         scope.launch {

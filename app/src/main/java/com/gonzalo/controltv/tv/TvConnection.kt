@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -96,6 +97,10 @@ class TvConnection(
 
     /** ¿La tele tiene un campo de texto abierto ahora? */
     fun textFieldOpen(): Boolean = client?.textFieldOpen == true
+
+    /** Espera hasta [timeoutMs] a que la tele avise un campo de texto abierto. */
+    suspend fun awaitTextField(timeoutMs: Long): Boolean =
+        withTimeoutOrNull(timeoutMs) { while (!textFieldOpen()) delay(100) } != null
 
     fun launchApp(appLink: String): Boolean = dispatch("abrir $appLink") { it.launchApp(appLink) }
 

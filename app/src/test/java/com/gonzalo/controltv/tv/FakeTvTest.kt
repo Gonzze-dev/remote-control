@@ -122,6 +122,34 @@ class FakeTvTest {
     }
 
     @Test
+    fun commandsKeepTheSessionAliveAndSilenceEndsIt() {
+        val fingerprint = pair()
+        val ready = CountDownLatch(1)
+        val listener = object : RemoteClient.Listener {
+            override fun onReady(info: TvInfo?, poweredOn: Boolean) = ready.countDown()
+            override fun onPowerChanged(poweredOn: Boolean) = Unit
+            override fun onAppChanged(appPackage: String) = Unit
+            override fun onVolumeChanged(volume: VolumeInfo) = Unit
+        }
+        val client = RemoteClient("127.0.0.1", phone, fingerprint, log, listener, tv.controlPort, idleTimeoutMs = 1500)
+        val ended = LinkedBlockingQueue<Throwable>()
+        thread { try { client.run() } catch (e: Throwable) { ended.add(e) } }
+        assertTrue(ready.await(5, TimeUnit.SECONDS))
+
+        // La tele de prueba no manda nada más (como la real mientras recibe comandos).
+        // Mandando una tecla cada 300 ms durante 4 s, la sesión no se tiene que cortar.
+        repeat(13) {
+            client.sendKey(Keys.DPAD_RIGHT)
+            Thread.sleep(300)
+        }
+        assertEquals(null, ended.poll())
+
+        // Sin comandos ni mensajes, se corta poco después del límite.
+        val error = ended.poll(5, TimeUnit.SECONDS)
+        assertTrue("se esperaba IdleTimeoutException y llegó $error", error is IdleTimeoutException)
+    }
+
+    @Test
     fun unknownPhoneNeedsPairing() {
         // El celu nunca se vinculó: la tele corta el TLS.
         val client = RemoteClient("127.0.0.1", phone, tv.fingerprint, log, NoListener, tv.controlPort)
@@ -158,6 +186,7 @@ class FakeTvTest {
             } as TvState.Conectado
             assertEquals("com.netflix.ninja", connected.app)
             assertEquals(12, connected.volumen?.level)
+            assertTrue(connection.awaitTextField(2_000)) // la tele de prueba avisa un campo abierto
 
             assertTrue(connection.sendKey(Keys.VOLUME_UP))
             var got: ProtoMessage

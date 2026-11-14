@@ -114,6 +114,7 @@ private enum class Overlay { None, Settings, Log }
 private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
     val state by vm.state.collectAsStateWithLifecycle()
     val apps by vm.apps.collectAsStateWithLifecycle()
+    val icons by vm.icons.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Control) }
     var overlay by rememberSaveable { mutableStateOf(Overlay.None) }
     val snackbar = remember { SnackbarHostState() }
@@ -195,6 +196,9 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
                         onSave = vm::saveApp,
                         onDelete = vm::deleteApp,
                         onOpenSettings = { overlay = Overlay.Settings },
+                        icons = icons,
+                        onSetImage = vm::setAppImage,
+                        onRemoveImage = vm::removeAppImage,
                     )
                 }
             }
