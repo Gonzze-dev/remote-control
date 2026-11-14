@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícono de la app: un pad direccional ámbar (aro + OK + flechas). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Aro -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFF9F45"
+        android:strokeWidth="5"
+        android:pathData="M54,29a25,25 0 1,0 0.01,0z" />
+    <!-- OK -->
+    <path
+        android:fillColor="#FFFF9F45"
+        android:pathData="M54,45a9,9 0 1,0 0.01,0z" />
+    <!-- Flechas -->
+    <path
+        android:fillColor="#FFFFC08A"
+        android:pathData="M54,33.5l4.5,4.5h-9z M54,74.5l-4.5,-4.5h9z M33.5,54l4.5,-4.5v9z M74.5,54l-4.5,4.5v-9z" />
+</vector>
