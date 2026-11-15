@@ -45,8 +45,8 @@ Riesgo aceptado: si la app no está instalada en la tele, ese OK cae en "Instala
 
 ## 2. Para retomar (15/11/2026)
 
-La **1.2.0** está hecha pero **sin commit ni publicar**: está instalada en el celu de Gonzalo como compilación de
-prueba (firmada con la clave de las versiones, así que se actualiza encima sin perder nada). Trae:
+La **1.2.0** está en `main` (commit `90492cf`) pero **sin publicar**: no tiene etiqueta. Está instalada en el celu
+de Gonzalo como compilación de prueba (firmada con la clave de las versiones, así que se actualiza encima sin perder nada). Trae:
 
 - **Teles de la casa:** busca las teles en la red (`_androidtvremote2._tcp`), guarda varias, cambia de una a
   otra desde el título del control o desde Ajustes, y si una cambia de IP la encuentra sola comparando la huella
@@ -70,7 +70,8 @@ Lo primero mañana:
      "→ Voz: … s al Asistente, … bytes, pico …" (un pico menor a ~500 es silencio).
 2. **Actualizar el README** con lo nuevo (teles de la casa, voz, touchpad, botones de volumen, acceso rápido;
    las pruebas son 60, 2 saltadas) y regenerar las capturas de `docs/diseno`.
-3. **Publicar la 1.2.0:** commit, `git tag -a v1.2.0` y push. Las notas: lo de la lista de arriba.
+3. **Publicar la 1.2.0:** `git tag -a v1.2.0` (el mensaje son las notas: lo de la lista de arriba) y
+   `git push origin v1.2.0`.
 
 ## 3. Lo que quedó probado el 14/11/2026
 
