@@ -7,7 +7,7 @@ plugins {
 
 // La versión se sube acá antes de publicar; la etiqueta vX.Y.Z tiene que coincidir (el workflow lo revisa).
 // `-PappVersion=1.0.9` la cambia para una compilación de prueba.
-val appVersion = (findProperty("appVersion") as String?) ?: "1.1.1"
+val appVersion = (findProperty("appVersion") as String?) ?: "1.2.0"
 
 /** 1.2.3 → 10203. Updater.versionCode hace la misma cuenta con la etiqueta de la release. */
 fun versionCodeOf(version: String): Int {

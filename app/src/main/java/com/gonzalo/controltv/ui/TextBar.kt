@@ -47,6 +47,9 @@ fun TextBar(
     onSend: () -> Unit,
     onMic: () -> Unit,
     modifier: Modifier = Modifier,
+    listening: Boolean = false,
+    onMicHoldStart: () -> Unit = {},
+    onMicHoldEnd: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(28.dp)
     Row(
@@ -87,7 +90,13 @@ fun TextBar(
             },
         )
         // Borrar y enviar se hacen con el teclado del celu: la tecla de acción manda (o da Enter en vivo).
-        BarKey(R.drawable.ic_mic, "Dictar por voz", Hold.None, onMic)
+        // Tocar: dictado del celu (escribe en la tele). Mantener: hablarle al Asistente de la tele.
+        BarKey(
+            R.drawable.ic_mic, "Dictar por voz; mantener apretado para hablarle al Asistente", Hold.LongPress, onMic,
+            onLongStart = onMicHoldStart, onLongEnd = onMicHoldEnd,
+            container = if (listening) Palette.AccentContainer else Color.Transparent,
+            tint = if (listening) Palette.Accent else Palette.TextMuted,
+        )
     }
 }
 
@@ -99,6 +108,8 @@ private fun BarKey(
     onTap: () -> Unit,
     container: Color = Color.Transparent,
     tint: Color = Palette.TextMuted,
+    onLongStart: () -> Unit = {},
+    onLongEnd: () -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
     Box(
@@ -106,7 +117,7 @@ private fun BarKey(
             .size(44.dp)
             .clip(CircleShape)
             .background(if (pressed) Palette.SurfacePressed else container)
-            .remoteKey(label, hold, { pressed = it }, onTap),
+            .remoteKey(label, hold, { pressed = it }, onTap, onLongStart, onLongEnd),
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))

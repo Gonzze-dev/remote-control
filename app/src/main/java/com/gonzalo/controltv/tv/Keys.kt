@@ -14,6 +14,7 @@ object Keys {
     const val POWER = 26
     const val ENTER = 66
     const val DEL = 67
+    const val SEARCH = 84
     const val MEDIA_PLAY_PAUSE = 85
 
     /** Silencia la tele. Ojo: el 91 (KEYCODE_MUTE) silencia el micrófono, no el sonido. */
@@ -25,7 +26,7 @@ object Keys {
         HOME to "HOME", BACK to "BACK",
         DPAD_UP to "DPAD_UP", DPAD_DOWN to "DPAD_DOWN", DPAD_LEFT to "DPAD_LEFT", DPAD_RIGHT to "DPAD_RIGHT",
         DPAD_CENTER to "DPAD_CENTER", VOLUME_UP to "VOLUME_UP", VOLUME_DOWN to "VOLUME_DOWN", POWER to "POWER",
-        ENTER to "ENTER", DEL to "DEL", MEDIA_PLAY_PAUSE to "MEDIA_PLAY_PAUSE", VOLUME_MUTE to "VOLUME_MUTE",
+        ENTER to "ENTER", DEL to "DEL", SEARCH to "SEARCH", MEDIA_PLAY_PAUSE to "MEDIA_PLAY_PAUSE", VOLUME_MUTE to "VOLUME_MUTE",
         SETTINGS to "SETTINGS", TV_INPUT to "TV_INPUT",
     )
 
@@ -49,8 +50,8 @@ object Features {
     const val VOLUME = 64
     const val APP_LINK = 512
 
-    /** Lo que pide la versión 1: PING + KEY + IME + POWER + VOLUME + APP_LINK = 615. */
-    const val REQUESTED = PING or KEY or IME or POWER or VOLUME or APP_LINK
+    /** PING + KEY + IME + VOICE + POWER + VOLUME + APP_LINK = 623 (la versión 1 pedía 615, sin voz). */
+    const val REQUESTED = PING or KEY or IME or VOICE or POWER or VOLUME or APP_LINK
 
     /** Para mostrar en Ajustes: "teclas, texto, encendido…". */
     fun describeForPeople(mask: Int): String = listOf(

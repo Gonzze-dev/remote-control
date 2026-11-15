@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.gonzalo.controltv.R
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.data.ConnectionLog
+import com.gonzalo.controltv.data.SavedTv
 import com.gonzalo.controltv.tv.Features
 import com.gonzalo.controltv.tv.TvState
 import com.gonzalo.controltv.ui.theme.MonoStyle
@@ -75,7 +76,15 @@ fun SettingsScreen(
     onCheckUpdates: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onShareApp: () -> Unit = {},
+    onSelectTv: (String) -> Unit = {},
+    onRenameTv: (id: String, name: String) -> Unit = { _, _ -> },
+    onRemoveTv: (String) -> Unit = {},
+    onAddTv: () -> Unit = {},
+    onVolumeKeys: (Boolean) -> Unit = {},
+    onTouchpad: (Boolean) -> Unit = {},
 ) {
+    var tvMenu by rememberSaveable { mutableStateOf<String?>(null) }
+    var renameTv by rememberSaveable { mutableStateOf<String?>(null) }
     var editIp by rememberSaveable { mutableStateOf(false) }
     var editName by rememberSaveable { mutableStateOf(false) }
     var confirmRepair by rememberSaveable { mutableStateOf(false) }
@@ -100,9 +109,19 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Section("Tele")
+            Section("Teles de la casa")
             Group {
-                NavRow("IP del Chromecast", settings.ip.ifBlank { "Sin configurar" }) { editIp = true }
+                val active = settings.activeTv
+                settings.tvs.forEach { tv ->
+                    TvRow(tv, isActive = tv.id == active?.id) { tvMenu = tv.id }
+                    Divider()
+                }
+                NavRow("Agregar otra tele", "Busca las teles en tu red y la vincula", accent = true) { onAddTv() }
+            }
+
+            Section(settings.tvName.ifBlank { "Tele" })
+            Group {
+                NavRow("IP", settings.ip.ifBlank { "Sin configurar" } + " · si cambia, la app la busca sola") { editIp = true }
                 Divider()
                 NavRow("Nombre que ve la tele", settings.clientName) { editName = true }
                 Divider()
@@ -122,8 +141,12 @@ fun SettingsScreen(
                 SwitchRow("Texto en vivo (experimental)", "Cada letra se manda al toque, sin apretar enviar", settings.liveText, onLiveText)
             }
 
-            Section("General")
+            Section("Control")
             Group {
+                SwitchRow("Botones de volumen del celu", "Manejan el volumen de la tele mientras la app está abierta", settings.volumeKeys, onVolumeKeys)
+                Divider()
+                SwitchRow("Touchpad en vez de flechas", "Deslizá para moverte por la tele y tocá para OK", settings.touchpad, onTouchpad)
+                Divider()
                 SwitchRow("Vibrar al tocar", null, settings.vibration, onVibration)
             }
 
@@ -148,6 +171,42 @@ fun SettingsScreen(
         }
     }
 
+    tvMenu?.let { id ->
+        val tv = settings.tvs.firstOrNull { it.id == id }
+        if (tv == null) {
+            tvMenu = null
+        } else {
+            AlertDialog(
+                onDismissRequest = { tvMenu = null },
+                containerColor = Palette.Surface,
+                title = { Text(tv.name) },
+                text = { Text(tv.ip) },
+                confirmButton = {
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (tv.id != settings.activeTv?.id) {
+                            TextButton(onClick = { tvMenu = null; onSelectTv(tv.id) }) { Text("Usar esta tele") }
+                        }
+                        TextButton(onClick = { tvMenu = null; renameTv = tv.id }) { Text("Cambiar el nombre") }
+                        TextButton(onClick = { tvMenu = null; onRemoveTv(tv.id) }) { Text("Quitar", color = Palette.Red) }
+                        TextButton(onClick = { tvMenu = null }) { Text("Cerrar", color = Palette.TextMuted) }
+                    }
+                },
+            )
+        }
+    }
+    renameTv?.let { id ->
+        val tv = settings.tvs.firstOrNull { it.id == id }
+        if (tv != null) {
+            TextInputDialog(
+                title = "Nombre de la tele",
+                initial = tv.name,
+                hint = "Por ejemplo: Comedor, Dormitorio",
+                keyboardType = KeyboardType.Text,
+                onDismiss = { renameTv = null },
+                onSave = { onRenameTv(id, it); renameTv = null },
+            )
+        }
+    }
     if (editIp) {
         TextInputDialog(
             title = "IP del Chromecast",
@@ -232,6 +291,26 @@ private fun NavRow(title: String, subtitle: String?, accent: Boolean = false, on
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge, color = if (accent) Palette.Accent else Palette.Text)
         if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Palette.TextMuted)
+    }
+}
+
+/** Una tele de la lista: la que se controla ahora va marcada. */
+@Composable
+private fun TvRow(tv: SavedTv, isActive: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(R.drawable.ic_tv), null, tint = if (isActive) Palette.Accent else Palette.TextMuted)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(tv.name, style = MaterialTheme.typography.bodyLarge)
+            Text(tv.ip, style = MaterialTheme.typography.bodySmall, color = Palette.TextMuted)
+        }
+        if (isActive) Text("En uso", style = MaterialTheme.typography.labelLarge, color = Palette.Accent)
     }
 }
 

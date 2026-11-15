@@ -96,6 +96,7 @@ private fun PairingRoute(vm: RemoteViewModel, s: AppSettings, canCancel: Boolean
     BackHandler(enabled = ui is PairingUi.EnterCode || (canCancel && ui is PairingUi.EnterIp)) {
         if (ui is PairingUi.EnterCode) vm.cancelCode() else vm.closePairing()
     }
+    val discovered by vm.discovered.collectAsStateWithLifecycle()
     PairingScreen(
         ui = ui,
         initialIp = s.ip,
@@ -106,6 +107,8 @@ private fun PairingRoute(vm: RemoteViewModel, s: AppSettings, canCancel: Boolean
         onCancelCode = vm::cancelCode,
         onClose = vm::closePairing,
         onFinish = vm::finishPairing,
+        discovered = discovered,
+        onPickTv = { tv, name -> vm.startPairing(tv.host, name, tv.name) },
     )
 }
 
@@ -121,6 +124,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
     val icons by vm.icons.collectAsStateWithLifecycle()
     val casting by vm.casting.collectAsStateWithLifecycle()
     val update by vm.update.collectAsStateWithLifecycle()
+    val listening by vm.assistantListening.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Control) }
     var overlay by rememberSaveable { mutableStateOf(Overlay.None) }
     val snackbar = remember { SnackbarHostState() }
@@ -167,6 +171,15 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 }
             },
+            onSelectTv = vm::selectTv,
+            onRenameTv = vm::renameTv,
+            onRemoveTv = vm::removeTv,
+            onAddTv = {
+                overlay = Overlay.None
+                vm.openPairing()
+            },
+            onVolumeKeys = vm::setVolumeKeys,
+            onTouchpad = vm::setTouchpad,
             onShareApp = {
                 val send = Intent(Intent.ACTION_SEND)
                     .setType("text/plain")
@@ -210,6 +223,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
                         onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
                         casting = casting != CastState.Idle,
                         updateAvailable = update is UpdateState.Available,
+                        assistantListening = listening,
                     )
                     Tab.Apps -> AppsScreen(
                         apps = apps,

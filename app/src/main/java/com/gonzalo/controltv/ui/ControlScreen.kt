@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import com.gonzalo.controltv.R
 import com.gonzalo.controltv.data.AppSettings
+import com.gonzalo.controltv.data.SavedTv
+import androidx.compose.foundation.clickable
 import com.gonzalo.controltv.tv.Keys
 import com.gonzalo.controltv.tv.TvState
 import com.gonzalo.controltv.ui.theme.Palette
@@ -78,6 +80,11 @@ interface RemoteActions {
     /** Manda una foto, un video o un audio del celu al Chromecast. */
     fun castMedia(uri: Uri)
     fun stopCasting()
+    /** Pasar a controlar otra de las teles vinculadas. */
+    fun selectTv(id: String)
+    /** Mantener apretado el micrófono: hablarle al Asistente de la tele (y soltar). */
+    fun startAssistant()
+    fun stopAssistant()
 
     object Noop : RemoteActions {
         override fun key(code: Int) = Unit
@@ -89,6 +96,9 @@ interface RemoteActions {
         override fun retry() = Unit
         override fun castMedia(uri: Uri) = Unit
         override fun stopCasting() = Unit
+        override fun selectTv(id: String) = Unit
+        override fun startAssistant() = Unit
+        override fun stopAssistant() = Unit
     }
 }
 
@@ -104,7 +114,13 @@ fun ControlScreen(
     modifier: Modifier = Modifier,
     casting: Boolean = false,
     updateAvailable: Boolean = false,
+    assistantListening: Boolean = false,
 ) {
+    val context = LocalContext.current
+    // El micrófono para el Asistente se pide la primera vez que se mantiene apretado.
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        onMessage(if (granted) "Listo: mantené apretado el micrófono y hablale a la tele" else "Sin el micrófono no se puede hablar al Asistente")
+    }
     var text by rememberSaveable { mutableStateOf("") }
     var lastSent by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -127,7 +143,15 @@ fun ControlScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        StatusHeader(state, appLabel, settings.ip, onOpenSettings, actions::retry, onRepair, settingsBadge = updateAvailable) {
+        // "Conectado · Comedor": el nombre de la tele si tiene uno propio; si no, su IP.
+        val where = settings.tvName.takeIf { it.isNotBlank() && it != AppSettings.DEFAULT_TV_NAME } ?: settings.ip
+        StatusHeader(
+            state, appLabel, where, onOpenSettings, actions::retry, onRepair,
+            settingsBadge = updateAvailable,
+            tvs = settings.tvs,
+            activeTvId = settings.activeTv?.id,
+            onSelectTv = actions::selectTv,
+        ) {
             // La tecla de configuración del control: abre el panel rápido de Google TV.
             // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
             IconButton(onClick = { actions.key(Keys.SETTINGS) }) {
@@ -161,7 +185,15 @@ fun ControlScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(gap),
             ) {
-                DPad(padSize, actions::key, actions::keyLongStart, actions::keyLongEnd)
+                if (settings.touchpad) {
+                    Touchpad(
+                        padSize, actions::key,
+                        onOkLongStart = { actions.keyLongStart(Keys.DPAD_CENTER) },
+                        onOkLongEnd = { actions.keyLongEnd(Keys.DPAD_CENTER) },
+                    )
+                } else {
+                    DPad(padSize, actions::key, actions::keyLongStart, actions::keyLongEnd)
+                }
                 if (showRows) {
                     Row(
                         Modifier.width(clusterWidth),
@@ -208,7 +240,17 @@ fun ControlScreen(
                 text = new
             },
             live = settings.liveText,
-            placeholder = lastSent?.let { "Mandado: «$it»" } ?: "Escribir en la tele…",
+            placeholder = when {
+                assistantListening -> "Hablale a la tele… soltá para terminar"
+                else -> lastSent?.let { "Mandado: «$it»" } ?: "Escribir en la tele…"
+            },
+            listening = assistantListening,
+            onMicHoldStart = {
+                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (granted) actions.startAssistant() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            onMicHoldEnd = actions::stopAssistant,
             onSend = {
                 if (settings.liveText) {
                     actions.liveSubmit(text)
@@ -244,8 +286,12 @@ fun StatusHeader(
     onRetry: () -> Unit,
     onRepair: () -> Unit,
     settingsBadge: Boolean = false,
+    tvs: List<SavedTv> = emptyList(),
+    activeTvId: String? = null,
+    onSelectTv: (String) -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
+    var tvMenu by remember { mutableStateOf(false) }
     val (dot, title, subtitle) = when (state) {
         is TvState.Conectado ->
             if (state.prendida) Triple(Palette.Green, appLabel ?: "Conectado", "Conectado · $host")
@@ -267,15 +313,35 @@ fun StatusHeader(
     ) {
         StatusDot(dot, pulsing = state is TvState.Conectando)
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = Palette.TextMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        // Con más de una tele, tocar el título deja elegir cuál controlar.
+        Box(Modifier.weight(1f)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (tvs.size > 1) Modifier.clickable { tvMenu = true } else Modifier),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (tvs.size > 1) "$subtitle ▾" else subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Palette.TextMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            DropdownMenu(expanded = tvMenu, onDismissRequest = { tvMenu = false }) {
+                tvs.forEach { tv ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(tv.name, color = if (tv.id == activeTvId) Palette.Accent else Palette.Text)
+                        },
+                        onClick = {
+                            tvMenu = false
+                            if (tv.id != activeTvId) onSelectTv(tv.id)
+                        },
+                    )
+                }
+            }
         }
         when (state) {
             // Si el Chromecast maneja el volumen de la tele por HDMI, informa 0/0: no hay nivel que mostrar.

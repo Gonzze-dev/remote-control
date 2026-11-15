@@ -123,6 +123,20 @@ class RemoteClient(
 
     fun launchApp(appLink: String) = write(Remote.appLinkLaunch(appLink), "abrir $appLink")
 
+    /** Sesiones de voz que abrió la tele (remote_voice_begin), en orden. */
+    private val voiceSessions = java.util.concurrent.LinkedBlockingQueue<Int>()
+
+    fun clearVoiceSessions() = voiceSessions.clear()
+
+    /** Espera a que la tele abra el Asistente después de la tecla SEARCH. Bloquea. */
+    fun awaitVoiceSession(timeoutMs: Long): Int? = voiceSessions.poll(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+
+    fun voiceBegin(session: Int) = write(Remote.voiceBegin(session), "remote_voice_begin (sesión $session)")
+
+    fun voicePayload(session: Int, samples: ByteArray) = write(Remote.voicePayload(session, samples), description = null)
+
+    fun voiceEnd(session: Int) = write(Remote.voiceEnd(session), "remote_voice_end (sesión $session)")
+
     override fun close() {
         closed = true
         runCatching { ssl?.close() }
@@ -183,6 +197,10 @@ class RemoteClient(
             is RemoteEvent.Volume -> {
                 log.log("← volumen ${event.level}/${event.max}${if (event.muted) " (silencio)" else ""}")
                 listener.onVolumeChanged(VolumeInfo(event.level, event.max, event.muted))
+            }
+            is RemoteEvent.VoiceBegin -> {
+                log.log("← remote_voice_begin: sesión ${event.session} (${event.appPackage})")
+                voiceSessions.offer(event.session)
             }
             is RemoteEvent.Error -> log.log("← remote_error (campos del mensaje rechazado: ${event.fields})")
             is RemoteEvent.Other -> log.log(

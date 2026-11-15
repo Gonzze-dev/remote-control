@@ -43,18 +43,61 @@ Store (`com.android.vending`), la app espera 1 s y aprieta OK. Moonlight abrió 
 desde el toque. Las apps guardadas con `market://launch` se pasan solas al formato nuevo.
 Riesgo aceptado: si la app no está instalada en la tele, ese OK cae en "Instalar".
 
-## 2. Otros pendientes
+## 2. Para retomar (15/11/2026)
 
-- **Probar viendo la tele:** volumen, silencio y play/pausa. Ya se mandan sin errores, pero
-  nadie los vio en pantalla. El volumen pasa por HDMI hacia la Sony. El encendido ya está
-  probado: la tele avisó que prendió (14/11/2026).
-- **Probar el resto de las apps:** Prime Video, Disney+, Plex, Twitch, Spotify, Crunchyroll y
-  Kodi. YouTube y Netflix ya están probadas, y Moonlight por paquete. Ojo: si un link no lo abre ninguna app, la tele
-  corta la conexión (ver la sección 1). La app reconecta sola, pero conviene sacar los que fallen.
-- **Mensaje 24:** la tele responde al texto con un mensaje que no está en los `.proto`. El log
-  muestra sus bytes; falta capturarlos y ver qué es.
-- **Texto en vivo de fábrica:** decidir si queda activado por defecto.
-- **Firma propia para el APK:** hoy se firma con la clave de depuración de esta PC. Con un
-  keystore propio (guardado fuera del repo) se puede actualizar la app desde otra compu.
-- **Versión 2 del plan original:** botones de volumen físicos del celu, tile de Ajustes rápidos o
-  widget, touchpad, voz directo al Asistente de la tele y más de un dispositivo.
+La **1.2.0** está hecha pero **sin commit ni publicar**: está instalada en el celu de Gonzalo como compilación de
+prueba (firmada con la clave de las versiones, así que se actualiza encima sin perder nada). Trae:
+
+- **Teles de la casa:** busca las teles en la red (`_androidtvremote2._tcp`), guarda varias, cambia de una a
+  otra desde el título del control o desde Ajustes, y si una cambia de IP la encuentra sola comparando la huella
+  de su certificado. ✅ probado.
+- **Botones de volumen del celu** manejan el de la tele con la app abierta. ✅ probado.
+- **Touchpad** en vez de flechas (Ajustes). ✅ probado.
+- **Control TV en los ajustes rápidos** del celu (el panel que se baja desde arriba). ✅ probado.
+- **Apps de la casa** como lista de fábrica, y a las listas guardadas se les sacan Plex, Twitch, Spotify y Kodi
+  (si no se editaron) y se suman Flow y Moonlight. ✅ probado.
+- **Voz al Asistente** manteniendo apretado el micrófono. ⚠ **Falta probarlo desde el celu** (ver abajo).
+
+Lo primero mañana:
+
+1. **Probar la voz al Asistente:** mantener apretado el micrófono hasta que se ponga naranja y la barra diga
+   "Hablale a la tele…", decir "abrí YouTube" y soltar. Tocarlo (sin mantener) es el dictado del celu, que ya
+   andaba: la noche del 14 ese fue el que se probó ("Abrir YouTube" llegó como texto y Google TV abrió YouTube).
+   - El protocolo está confirmado desde la PC con `TvLiveLab` (`TV_LAB_STEP=voice`): el Asistente entendió
+     "Batman". La clave fue mandar el audio en **trozos de 20 KB**: con trozos de 3,2 KB llega pero el
+     Asistente devuelve vacío (eso le pasaba a la app hasta la última compilación, que ya manda 20 KB).
+   - Para ver qué entendió: `adb logcat | grep FINAL_RESULT` en la tele, o el log de la app, que anota
+     "→ Voz: … s al Asistente, … bytes, pico …" (un pico menor a ~500 es silencio).
+2. **Actualizar el README** con lo nuevo (teles de la casa, voz, touchpad, botones de volumen, acceso rápido;
+   las pruebas son 60, 2 saltadas) y regenerar las capturas de `docs/diseno`.
+3. **Publicar la 1.2.0:** commit, `git tag -a v1.2.0` y push. Las notas: lo de la lista de arriba.
+
+## 3. Lo que quedó probado el 14/11/2026
+
+- **Volumen y silencio:** el Chromecast manda `<User Control Pressed>` Volume up/down/mute por HDMI-CEC a la
+  Sony y la Sony contesta ACK (historial de `dumpsys hdmi_control`). Play/pausa sale sin errores; falta verlo con
+  algo reproduciéndose.
+- **Links de cada app** (se le preguntó a la tele qué app abre cada uno con `cmd package query-activities`):
+  YouTube, Netflix (`netflix://`), Prime Video, Disney+ y Crunchyroll (`crunchyroll://`) andan. Flow y
+  Moonlight no tienen link propio: van por paquete. Plex, Twitch, Spotify y Kodi no están en la tele.
+- **Firma propia:** hecha (clave en `Documents\ControlTV-firma`, secretos en GitHub, versiones con GitHub
+  Actions).
+
+## 4. Otros pendientes
+
+- **Google Play:** pedirle a Google que revise la app (Play Protect la marcó como "dañina" en la 1.1.0, cuando
+  se instalaba sola) y, más adelante, el registro de desarrollador que va a exigir Google para instalar apps
+  fuera de Play Store.
+- **Mensaje 24:** la tele responde al texto con un mensaje que no está en los `.proto`. Hace falta un campo de
+  texto abierto en la tele para provocarlo; la app anota sus bytes en el log cuando llega.
+- **Texto en vivo de fábrica:** queda apagado. En el Inicio de CleanYourTV no sirve (no hay campo) y el texto
+  normal, con la tecla de acción, anda en todos lados.
+- **Widget** en la pantalla de inicio del celu (el acceso en los ajustes rápidos ya está).
+- **La depuración de la tele quedó prendida** a propósito, para investigar si se vuelve a perder una
+  vinculación. Apagarla cuando no haga falta (Opciones para desarrolladores: Depuración inalámbrica, Depuración
+  por USB y Revocar autorizaciones).
+- **"PC de pruebas"** quedó vinculado a la tele (lo usa `TvLiveLab`, con su certificado en el scratchpad de la
+  sesión). No pisa a ningún celu.
+- **El parche del launcher de CleanYourTV** (buscar desde Inicio) es local: si se actualiza cleanyourtv hay que
+  volver a aplicarlo (`Desktop\cleanyourtv\backup\comedor-2026-11-14\parche-launcher.patch`). Se podría
+  proponer a su autor.

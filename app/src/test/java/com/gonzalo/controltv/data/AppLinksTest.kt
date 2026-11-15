@@ -23,6 +23,19 @@ class AppLinksTest {
     }
 
     @Test
+    fun savedListsMoveToTheHouseholdApps() {
+        val factory10 = listOf(
+            TvApp("youtube", "YouTube", "https://www.youtube.com", "com.google.android.youtube.tv"),
+            TvApp("plex", "Plex", "plex://", "com.plexapp.android"),
+            TvApp("spotify", "Spotify", "spotify://mi-lista", "com.spotify.tv.android"), // editada: se queda
+            TvApp("x", "Moonlight", TvApp.marketLink("com.limelight"), "com.limelight"), // ya estaba
+        )
+        val result = AppsRepository.householdApps(factory10)
+        assertEquals(listOf("youtube", "spotify", "x", "flow"), result.map { it.id })
+        assertEquals(TvApp.marketLink("ar.com.flow.androidtv"), result.last().link)
+    }
+
+    @Test
     fun cleanYourTvHomeIsHomeNotAnApp() {
         // Con el Inicio de CleanYourTV en pantalla no tiene que aparecer "En pantalla → Agregar".
         assertTrue(AppNames.isSystem("com.gathin.tvhome"))

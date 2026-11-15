@@ -12,6 +12,7 @@ import com.gonzalo.controltv.update.UpdateState
 import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.data.TvApp
+import com.gonzalo.controltv.tv.DiscoveredTv
 import com.gonzalo.controltv.tv.Direction
 import com.gonzalo.controltv.tv.Keys
 import com.gonzalo.controltv.tv.PairingClient
@@ -58,6 +59,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
 
     init {
         viewModelScope.launch { CastService.messages.collect { toast(it) } }
+        viewModelScope.launch { app.voice.messages.collect { toast(it) } }
         // Cada vez que cambia la lista o la app en pantalla, se buscan los íconos que falten.
         viewModelScope.launch {
             combine(apps, state.map { (it as? TvState.Conectado)?.app }.distinctUntilChanged()) { list, pkg -> list to pkg }
@@ -145,6 +147,20 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
 
     /** El APK de la versión nueva, para bajarlo con el navegador (Android lo instala). */
     fun updateUrl(): String? = (update.value as? UpdateState.Available)?.release?.apkUrl
+
+    // ---- Voz al Asistente ----
+
+    val assistantListening: StateFlow<Boolean> = app.voice.listening
+
+    override fun startAssistant() {
+        if (state.value !is TvState.Conectado) {
+            toast("Sin conexión con la tele")
+            return
+        }
+        app.voice.start()
+    }
+
+    override fun stopAssistant() = app.voice.stop()
 
     // ---- Transmitir ----
 
@@ -272,6 +288,32 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         viewModelScope.launch { app.settings.setLiveText(value) }
     }
 
+    fun setVolumeKeys(value: Boolean) {
+        viewModelScope.launch { app.settings.setVolumeKeys(value) }
+    }
+
+    fun setTouchpad(value: Boolean) {
+        viewModelScope.launch { app.settings.setTouchpad(value) }
+    }
+
+    // ---- Teles de la casa ----
+
+    /** Teles que anuncian el control en la red. Busca solo mientras alguien mira la lista (la vinculación). */
+    val discovered: StateFlow<List<DiscoveredTv>> = app.discovery.discover()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(2_000), emptyList())
+
+    override fun selectTv(id: String) {
+        viewModelScope.launch { app.settings.setActiveTv(id) }
+    }
+
+    fun renameTv(id: String, name: String) {
+        viewModelScope.launch { app.settings.renameTv(id, name) }
+    }
+
+    fun removeTv(id: String) {
+        viewModelScope.launch { app.settings.removeTv(id) }
+    }
+
     fun clearLog() = app.log.clear()
 
     fun logText(): String = app.log.asText()
@@ -288,6 +330,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
     @Volatile private var pairingClient: PairingClient? = null
     private var pairingIp = ""
     private var pairingName = ""
+    private var pairingTvName: String? = null
     private var codeAttempts = 0
 
     fun openPairing() {
@@ -302,7 +345,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         _pairingOpen.value = false
     }
 
-    fun startPairing(ip: String, name: String) {
+    /** [tvName]: el nombre de la tele si se eligió de las encontradas en la red. */
+    fun startPairing(ip: String, name: String, tvName: String? = null) {
         val host = ip.trim()
         if (!isValidHost(host)) {
             _pairing.value = PairingUi.EnterIp("Esa IP no parece válida. Tiene que ser algo como 192.168.0.50")
@@ -311,6 +355,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         closePairingConnection()
         pairingIp = host
         pairingName = name.trim().ifBlank { AppSettings.DEFAULT_CLIENT_NAME }
+        // Si la IP escrita a mano es la de una tele encontrada, también se le pone su nombre.
+        pairingTvName = tvName ?: discovered.value.firstOrNull { it.host == host }?.name
         codeAttempts = 0
         _pairingOpen.value = true
         _pairing.value = PairingUi.Connecting
@@ -351,7 +397,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
             val result = withContext(Dispatchers.IO) { runCatching { client.finish(code) } }
             result.onSuccess { fingerprint ->
                 pairingClient = null
-                app.settings.savePairing(pairingIp, fingerprint, pairingName)
+                app.settings.savePairing(pairingIp, fingerprint, pairingName, pairingTvName)
                 _pairing.value = PairingUi.Done
                 connection.reconnect()
             }.onFailure { e ->

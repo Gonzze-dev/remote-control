@@ -54,6 +54,18 @@ class FakeTvTest {
     }
 
     @Test
+    fun aTvThatMovedIsFoundByItsFingerprint() = runBlocking {
+        // La red anuncia dos teles; la que tiene la huella guardada es la nuestra, en otra IP.
+        val network = kotlinx.coroutines.flow.flowOf(
+            listOf(DiscoveredTv("Vecino", "127.0.0.9"), DiscoveredTv("Comedor", "127.0.0.1")),
+        )
+        val locator = TvLocator({ network }, phoneCerts, log, tv.pairingPort)
+        assertEquals(tv.fingerprint, locator.fingerprintOf("127.0.0.1"))
+        assertEquals("127.0.0.1", locator.locate(tv.fingerprint, timeoutMs = 15_000))
+        assertEquals(null, locator.locate("OTRA_HUELLA", timeoutMs = 3_000))
+    }
+
+    @Test
     fun twoPhonesStayPaired() {
         // Mi celu y el de mi mamá: cada uno con su certificado, la tele recuerda a los dos.
         val mine = CertManager(createTempDirectory()).identityForPairing()
@@ -125,8 +137,8 @@ class FakeTvTest {
 
         // Lo que manda el celu al arrancar.
         val configure = tv.nextReceived().message(1)!!
-        assertEquals(615, configure.int(1)) // 623 de la tele ∩ 615 pedido
-        assertEquals(615, tv.nextReceived().message(2)!!.int(1))
+        assertEquals(623, configure.int(1)) // 623 de la tele ∩ 623 pedido (con voz)
+        assertEquals(623, tv.nextReceived().message(2)!!.int(1))
         assertTrue(ready.await(5, TimeUnit.SECONDS))
         assertEquals("Google", tvInfo?.vendor)
         assertEquals("Chromecast", tvInfo?.model)

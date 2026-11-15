@@ -85,6 +85,8 @@ sealed interface RemoteEvent {
     data class ImeBatchEdit(val imeCounter: Int, val fieldCounter: Int) : RemoteEvent
     data class Volume(val level: Int, val max: Int, val muted: Boolean, val playerModel: String) : RemoteEvent
     data class Start(val started: Boolean) : RemoteEvent
+    /** La tele abrió el Asistente para escuchar: los trozos de audio van con [session]. */
+    data class VoiceBegin(val session: Int, val appPackage: String) : RemoteEvent
     data class Error(val fields: Set<Int>) : RemoteEvent
     data class Other(val fields: Set<Int>) : RemoteEvent
 }
@@ -101,6 +103,9 @@ object Remote {
     private const val F_IME_KEY_INJECT = 20
     private const val F_IME_BATCH_EDIT = 21
     private const val F_IME_SHOW_REQUEST = 22
+    private const val F_VOICE_BEGIN = 30
+    private const val F_VOICE_PAYLOAD = 31
+    private const val F_VOICE_END = 32
     private const val F_START = 40
     private const val F_SET_VOLUME_LEVEL = 50
     private const val F_APP_LINK_LAUNCH = 90
@@ -144,6 +149,22 @@ object Remote {
 
     fun appLinkLaunch(appLink: String): ByteArray = message(F_APP_LINK_LAUNCH) { string(1, appLink) }
 
+    /*
+     * Voz al Asistente (probado con la tele real el 14/11/2026): el celu manda la tecla SEARCH, la tele contesta
+     * remote_voice_begin con un número de sesión, el celu la confirma con su propio remote_voice_begin (sin eso la
+     * tele ignora el audio), manda el audio (PCM de 16 bits, 8 kHz, mono, en trozos de 20 KB justos: con trozos
+     * más chicos la tele recibe el audio pero el Asistente no entiende nada) y cierra con remote_voice_end. El
+     * Asistente reconoce lo dicho y lo hace, como el botón del control físico.
+     */
+    fun voiceBegin(session: Int): ByteArray = message(F_VOICE_BEGIN) { int(1, session, always = true) }
+
+    fun voicePayload(session: Int, samples: ByteArray): ByteArray = message(F_VOICE_PAYLOAD) {
+        int(1, session, always = true)
+        bytes(2, samples)
+    }
+
+    fun voiceEnd(session: Int): ByteArray = message(F_VOICE_END) { int(1, session, always = true) }
+
     fun parse(bytes: ByteArray): RemoteEvent {
         val m = ProtoMessage.parse(bytes)
         m.message(F_CONFIGURE)?.let { c ->
@@ -173,6 +194,7 @@ object Remote {
             return RemoteEvent.Volume(level = v.int(7), max = v.int(6), muted = v.bool(8), playerModel = v.string(3))
         }
         m.message(F_START)?.let { return RemoteEvent.Start(it.bool(1)) }
+        m.message(F_VOICE_BEGIN)?.let { return RemoteEvent.VoiceBegin(it.int(1), it.string(2)) }
         m.message(F_ERROR)?.let { e -> return RemoteEvent.Error(e.message(2)?.fieldNumbers().orEmpty()) }
         return RemoteEvent.Other(m.fieldNumbers())
     }

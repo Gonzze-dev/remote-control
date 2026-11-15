@@ -37,9 +37,9 @@ class ProtocolTest {
     }
 
     @Test
-    fun configureReplyHasFeatures615() {
+    fun configureReplyHasFeatures623() {
         val m = ProtoMessage.parse(Remote.configure(Features.REQUESTED)).message(1)!!
-        assertEquals(615, m.int(1))
+        assertEquals(623, m.int(1))
         val info = m.message(2)!!
         assertEquals(1, info.int(3))
         assertEquals("1", info.string(4))
@@ -117,9 +117,22 @@ class ProtocolTest {
 
     @Test
     fun featureMask() {
-        assertEquals(615, Features.REQUESTED)
-        assertEquals("PING+KEY+IME+POWER+VOLUME+APP_LINK", Features.describe(615))
+        assertEquals(623, Features.REQUESTED)
+        assertEquals("PING+KEY+IME+VOICE+POWER+VOLUME+APP_LINK", Features.describe(623))
     }
+
+    @Test
+    fun voiceMessages() {
+        // Los bytes que mandó el laboratorio a la tele real el 14/11/2026 (el Asistente entendió "Batman").
+        assertEquals("f2 01 02 08 01", hex(Remote.voiceBegin(1)))
+        assertEquals("fa 01 06 08 01 12 02 0a 0b", hex(Remote.voicePayload(1, byteArrayOf(0x0a, 0x0b))))
+        assertEquals("82 02 02 08 01", hex(Remote.voiceEnd(1)))
+        // Lo que contestó la tele a la tecla SEARCH: sesión 1 del Asistente.
+        val begin = Remote.parse(unhex("f2011e0801121a636f6d2e676f6f676c652e616e64726f69642e6b61746e697373"))
+        assertEquals(RemoteEvent.VoiceBegin(1, "com.google.android.katniss"), begin)
+    }
+
+    private fun unhex(s: String) = ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 
     @Test
     fun certificateIsGeneratedOnceAndReloaded() {

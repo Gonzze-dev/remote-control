@@ -2,6 +2,7 @@ package com.gonzalo.controltv.ui
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gonzalo.controltv.R
+import com.gonzalo.controltv.tv.DiscoveredTv
 import com.gonzalo.controltv.ui.theme.MonoStyle
 import com.gonzalo.controltv.ui.theme.Palette
 
@@ -79,6 +81,8 @@ fun PairingScreen(
     onCancelCode: () -> Unit,
     onClose: () -> Unit,
     onFinish: () -> Unit,
+    discovered: List<DiscoveredTv> = emptyList(),
+    onPickTv: (tv: DiscoveredTv, name: String) -> Unit = { _, _ -> },
 ) {
     WizardFrame {
         when (ui) {
@@ -90,6 +94,8 @@ fun PairingScreen(
                 canCancel = canCancel,
                 onStart = onStart,
                 onClose = onClose,
+                discovered = discovered,
+                onPickTv = onPickTv,
             )
             is PairingUi.EnterCode, PairingUi.Verifying -> CodeStep(
                 error = (ui as? PairingUi.EnterCode)?.error,
@@ -154,14 +160,29 @@ private fun IpStep(
     canCancel: Boolean,
     onStart: (String, String) -> Unit,
     onClose: () -> Unit,
+    discovered: List<DiscoveredTv>,
+    onPickTv: (DiscoveredTv, String) -> Unit,
 ) {
     var ip by rememberSaveable { mutableStateOf(initialIp) }
     var name by rememberSaveable { mutableStateOf(initialName) }
 
     Hero(
         R.drawable.ic_tv, "Paso 1 de 2", "Vinculá tu tele",
-        "Se hace una sola vez. El celu y el Chromecast tienen que estar en la misma red Wi‑Fi.",
+        "Se hace una sola vez por tele. El celu y la tele tienen que estar en la misma red Wi‑Fi.",
     )
+    // Las teles que anuncian el control en la red: tocar una es lo mismo que escribir su IP.
+    Text("TELES EN TU RED", fontSize = 11.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold, color = Palette.TextMuted)
+    Spacer(Modifier.height(8.dp))
+    if (discovered.isEmpty()) {
+        Text("Buscando…", style = MaterialTheme.typography.bodyMedium, color = Palette.TextFaint)
+    }
+    discovered.forEach { tv ->
+        TvChoice(tv, enabled = !busy) { onPickTv(tv, name) }
+        Spacer(Modifier.height(8.dp))
+    }
+    Spacer(Modifier.height(16.dp))
+    Text("O ESCRIBÍ LA IP", fontSize = 11.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Bold, color = Palette.TextMuted)
+    Spacer(Modifier.height(8.dp))
     OutlinedTextField(
         value = ip,
         onValueChange = { ip = it.trim() },
@@ -330,6 +351,27 @@ fun PermissionScreen(permanentlyDenied: Boolean, onRequest: () -> Unit, onOpenSe
         } else {
             PrimaryButton("Dar permiso", enabled = true, busy = false, onClick = onRequest)
         }
+    }
+}
+
+@Composable
+private fun TvChoice(tv: DiscoveredTv, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Palette.SurfaceHigh)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(painterResource(R.drawable.ic_tv), null, tint = Palette.Accent, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(tv.name, style = MaterialTheme.typography.bodyLarge)
+            Text(tv.host, style = MaterialTheme.typography.bodySmall, color = Palette.TextMuted)
+        }
+        Text("Vincular", style = MaterialTheme.typography.labelLarge, color = Palette.Accent)
     }
 }
 

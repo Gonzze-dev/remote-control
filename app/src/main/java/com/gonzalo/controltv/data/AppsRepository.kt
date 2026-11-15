@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -61,6 +62,13 @@ class AppsRepository(context: Context) {
 
     suspend fun delete(id: String) = edit { list -> list.filterNot { it.id == id } }
 
+    /** Una sola vez: pasa una lista guardada con las apps de fábrica viejas a las de la casa ([householdApps]). */
+    suspend fun migrate() = store.edit { p ->
+        if ((p[APPS_VERSION] ?: 1) >= 2) return@edit
+        p[APPS_JSON]?.let { runCatching { fromJson(it) }.getOrNull() }?.let { p[APPS_JSON] = toJson(householdApps(it)) }
+        p[APPS_VERSION] = 2
+    }
+
     private suspend fun edit(change: (List<TvApp>) -> List<TvApp>) {
         store.edit { p ->
             val current = p[APPS_JSON]?.let { runCatching { fromJson(it) }.getOrNull() } ?: DEFAULT_APPS
@@ -70,19 +78,36 @@ class AppsRepository(context: Context) {
 
     companion object {
         private val APPS_JSON = stringPreferencesKey("apps_json")
+        private val APPS_VERSION = intPreferencesKey("apps_version")
 
-        /** Las apps de la sección "Apps para abrir de un toque" del plan. */
+        private val FLOW = TvApp("flow", "Flow", TvApp.marketLink("ar.com.flow.androidtv"), "ar.com.flow.androidtv")
+        private val MOONLIGHT = TvApp("moonlight", "Moonlight", TvApp.marketLink("com.limelight"), "com.limelight")
+
+        /**
+         * Las apps de la tele de la casa, con los links que la tele acepta (probados el 14/11/2026 preguntándole qué
+         * app abre cada uno). Flow y Moonlight no tienen link propio: se abren por paquete.
+         */
         val DEFAULT_APPS = listOf(
             TvApp("youtube", "YouTube", "https://www.youtube.com", "com.google.android.youtube.tv"),
             TvApp("netflix", "Netflix", "netflix://", "com.netflix.ninja"),
             TvApp("prime", "Prime Video", "https://app.primevideo.com", "com.amazon.amazonvideo.livingroom"),
             TvApp("disney", "Disney+", "https://www.disneyplus.com", "com.disney.disneyplus"),
-            TvApp("plex", "Plex", "plex://", "com.plexapp.android"),
-            TvApp("twitch", "Twitch", "twitch://home", "tv.twitch.android.app"),
-            TvApp("spotify", "Spotify", "spotify://", "com.spotify.tv.android"),
             TvApp("crunchyroll", "Crunchyroll", "crunchyroll://", "com.crunchyroll.crunchyroid"),
-            TvApp("kodi", "Kodi", TvApp.marketLink("org.xbmc.kodi"), "org.xbmc.kodi"),
+            FLOW,
+            MOONLIGHT,
         )
+
+        /** Las de fábrica de la 1.0 que no están en la tele: si siguen como venían, nadie las usa. */
+        private val RETIRED = mapOf(
+            "plex" to "plex://",
+            "twitch" to "twitch://home",
+            "spotify" to "spotify://",
+            "kodi" to TvApp.marketLink("org.xbmc.kodi"),
+        )
+
+        /** Saca las de fábrica que no están en la tele (sin tocar las editadas) y suma Flow y Moonlight si faltan. */
+        fun householdApps(list: List<TvApp>): List<TvApp> =
+            list.filterNot { RETIRED[it.id] == it.link } + listOf(FLOW, MOONLIGHT).filter { app -> list.none { it.pkg == app.pkg } }
 
         private fun toJson(list: List<TvApp>): String = JSONArray().apply {
             list.forEach {

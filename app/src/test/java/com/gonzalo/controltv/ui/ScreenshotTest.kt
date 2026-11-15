@@ -14,6 +14,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.data.AppsRepository
 import com.gonzalo.controltv.data.ConnectionLog
+import com.gonzalo.controltv.data.SavedTv
 import com.gonzalo.controltv.tv.Features
 import com.gonzalo.controltv.tv.TvInfo
 import com.gonzalo.controltv.tv.TvState
@@ -38,7 +39,11 @@ class ScreenshotTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val settings = AppSettings(ip = "192.168.0.50", tvFingerprint = "AB", clientName = "Mi control")
+    private val settings = AppSettings(
+        tvs = listOf(SavedTv("1", "Comedor", "192.168.0.50", "AB"), SavedTv("2", "Dormitorio", "192.168.0.51", "CD")),
+        activeTvId = "1",
+        clientName = "Mi control",
+    )
     private val tele = TvInfo("Google", "Chromecast HD", "6.0", Features.REQUESTED)
     private val connected = TvState.Conectado(
         app = "com.netflix.ninja",

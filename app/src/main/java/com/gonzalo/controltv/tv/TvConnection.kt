@@ -23,7 +23,8 @@ import java.net.UnknownHostException
 
 /** El único estado que mira la interfaz. */
 sealed interface TvState {
-    data class Desconectado(val motivo: String? = null, val reintentoEnMs: Long? = null) : TvState
+    /** [noAparece]: la tele no contestó en su IP (puede que el router le haya dado otra; ver TvLocator). */
+    data class Desconectado(val motivo: String? = null, val reintentoEnMs: Long? = null, val noAparece: Boolean = false) : TvState
     data class Conectando(val intento: Int) : TvState
     data class Conectado(
         val app: String? = null,
@@ -104,6 +105,24 @@ class TvConnection(
 
     fun launchApp(appLink: String): Boolean = dispatch("abrir $appLink") { it.launchApp(appLink) }
 
+    /**
+     * Abre el Asistente para hablarle: aprieta Buscar, espera la sesión de voz de la tele y la confirma.
+     * Devuelve el número de sesión, o null si la tele no la abrió a tiempo.
+     */
+    suspend fun beginVoice(timeoutMs: Long = VOICE_BEGIN_TIMEOUT_MS): Int? {
+        val c = client?.takeIf { it.isReady } ?: return null
+        c.clearVoiceSessions()
+        if (!sendKey(Keys.SEARCH)) return null
+        val session = kotlinx.coroutines.withContext(Dispatchers.IO) { c.awaitVoiceSession(timeoutMs) } ?: return null
+        dispatch("voz") { it.voiceBegin(session) }
+        return session
+    }
+
+    /** Un trozo de audio (PCM de 16 bits, 8 kHz, mono) para la sesión de voz. Sale en orden con lo demás. */
+    fun sendVoice(session: Int, samples: ByteArray): Boolean = dispatch("audio") { it.voicePayload(session, samples) }
+
+    fun endVoice(session: Int): Boolean = dispatch("fin de voz") { it.voiceEnd(session) }
+
     private fun dispatch(what: String, action: (RemoteClient) -> Unit): Boolean {
         val c = client
         if (c == null || !c.isReady) {
@@ -167,6 +186,7 @@ class TvConnection(
                 client = c
             }
 
+            var unreachable = false
             val reason: String = try {
                 c.run()
                 "Se cortó la conexión"
@@ -183,6 +203,7 @@ class TvConnection(
                 e.message ?: "Error de TLS"
             } catch (e: Exception) {
                 authFailures = 0
+                unreachable = e is SocketTimeoutException || e is ConnectException || e is NoRouteToHostException
                 describeNetworkError(e, t.host)
             } finally {
                 c.close()
@@ -197,7 +218,7 @@ class TvConnection(
                 authFailures = 0
             }
             log.log("✗ $reason. Reintento en ${formatDelay(delayMs)}")
-            _state.value = TvState.Desconectado(reason, delayMs)
+            _state.value = TvState.Desconectado(reason, delayMs, unreachable && !c.isReady)
             withTimeoutOrNull(delayMs) { wake.receive() }
             delayMs = (delayMs * 2).coerceAtMost(MAX_DELAY_MS)
         }
@@ -237,6 +258,7 @@ class TvConnection(
 
     private companion object {
         const val INITIAL_DELAY_MS = 100L
+        const val VOICE_BEGIN_TIMEOUT_MS = 4_000L
         const val MAX_DELAY_MS = 30_000L
 
         /** Rechazos seguidos (no definitivos) antes de pedir que se vincule de nuevo. */
