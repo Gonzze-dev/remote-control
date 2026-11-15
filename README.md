@@ -3,6 +3,34 @@
 Control remoto propio para el Chromecast con Google TV. Habla directo con la tele por Wi‑Fi
 (protocolo Android TV Remote v2, puertos 6467 y 6466), sin servidor.
 
+## Descargar
+
+**[Bajar Control TV (última versión)](https://github.com/Gonzze-dev/remote-control/releases/latest/download/control-tv.apk)**,
+o escaneá el código con el celu:
+
+<img src="docs/descarga-qr.png" width="160" alt="Código QR para bajar Control TV">
+
+El link siempre baja la última versión. Al abrir el APK, Android pide permitir instalar apps desde el navegador
+(o desde Archivos). Después la app avisa sola cuando hay una versión nueva: aparece un punto en el engranaje, y
+en Ajustes, "Actualizar a la versión…". También se puede compartir el link desde Ajustes → Compartir la app.
+
+## Publicar una versión
+
+Las versiones las compila y publica GitHub Actions ([release.yml](.github/workflows/release.yml)) con la clave
+de firma guardada en los secretos del repo:
+
+1. Subir `appVersion` en [app/build.gradle.kts](app/build.gradle.kts) (por ejemplo, `1.2.0`) y hacer commit.
+2. `git tag -a v1.2.0 -m "Lo que cambia"`: el mensaje de la etiqueta son las notas de la release.
+3. `git push origin main v1.2.0`
+
+El workflow revisa que la etiqueta coincida con `appVersion`, corre las pruebas, compila el APK, revisa que
+la firma sea la de siempre y crea la release con `control-tv.apk`. Cada versión tiene que ser más alta que la
+anterior: el `versionCode` sale de la versión (1.2.3 → 10203).
+
+**La clave de firma** (`control-tv-release.jks`) no está en el repo. Hay una copia en `Documents\ControlTV-firma`
+de la PC de Gonzalo, con su contraseña, y otra en los secretos `KEYSTORE_BASE64` y `KEYSTORE_PASSWORD` del repo.
+Si se pierde, las versiones nuevas no se pueden instalar encima de las viejas.
+
 ## Compilar e instalar
 
 1. Abrí la carpeta `control-tv` en Android Studio (está en el menú Inicio).
@@ -15,9 +43,12 @@ gradlew assembleDebug        → app/build/outputs/apk/debug/app-debug.apk
 gradlew testDebugUnitTest    → pruebas + capturas de pantalla
 ```
 
+Con `keystore.properties` en la raíz (lo ignora git, apunta a la clave de firma), las compilaciones de prueba
+también se firman con la clave de las versiones publicadas, así se instalan encima sin perder la vinculación.
+
 ## Probar sin la tele
 
-`gradlew testDebugUnitTest` corre 50 pruebas (y saltea una que necesita el Chromecast de verdad):
+`gradlew testDebugUnitTest` corre 53 pruebas (y saltea una que necesita el Chromecast de verdad):
 
 - **ProtocolTest**: bytes exactos de cada mensaje, el secreto de vinculación y el certificado.
 - **AppLinksTest**: el link para abrir una app por paquete, el cambio de los links viejos y que el Inicio de
@@ -33,6 +64,7 @@ gradlew testDebugUnitTest    → pruebas + capturas de pantalla
   adelantar, el rango fuera del archivo y que solo se sirva el archivo publicado.
 - **CastLiveTest**: muestra el logo de Google en el Chromecast real y lo cierra. Solo corre con
   `CAST_LIVE_HOST=192.168.1.31`.
+- **UpdaterTest**: leer la última release de GitHub y que la versión dé el mismo `versionCode` que Gradle.
 - **ScreenshotTest**: genera las capturas de `docs/diseno/` (quedan en `app/build/outputs/roborazzi/`).
 
 ## Diseño

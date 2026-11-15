@@ -55,6 +55,7 @@ import com.gonzalo.controltv.tv.Features
 import com.gonzalo.controltv.tv.TvState
 import com.gonzalo.controltv.ui.theme.MonoStyle
 import com.gonzalo.controltv.ui.theme.Palette
+import com.gonzalo.controltv.update.UpdateState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,6 +70,11 @@ fun SettingsScreen(
     onVibration: (Boolean) -> Unit,
     onLiveText: (Boolean) -> Unit,
     onOpenLog: () -> Unit,
+    version: String = "",
+    update: UpdateState = UpdateState.Idle,
+    onCheckUpdates: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
+    onShareApp: () -> Unit = {},
 ) {
     var editIp by rememberSaveable { mutableStateOf(false) }
     var editName by rememberSaveable { mutableStateOf(false) }
@@ -121,13 +127,20 @@ fun SettingsScreen(
                 SwitchRow("Vibrar al tocar", null, settings.vibration, onVibration)
             }
 
+            Section("Control TV")
+            Group {
+                UpdateRow(version, update, onCheckUpdates, onInstallUpdate)
+                Divider()
+                NavRow("Compartir la app", "Manda el link para bajarla e instalarla") { onShareApp() }
+            }
+
             Section("Diagnóstico")
             Group {
                 NavRow("Log de conexión", "Cada mensaje que va y viene, para ver dónde se traba") { onOpenLog() }
             }
 
             Text(
-                "Control TV 1.0 · protocolo Android TV Remote v2",
+                "Control TV $version · protocolo Android TV Remote v2",
                 style = MaterialTheme.typography.bodySmall,
                 color = Palette.TextFaint,
                 modifier = Modifier.padding(top = 16.dp, start = 8.dp, bottom = 24.dp),
@@ -164,6 +177,26 @@ fun SettingsScreen(
             confirmButton = { TextButton(onClick = { confirmRepair = false; onRepair() }) { Text("Vincular") } },
             dismissButton = { TextButton(onClick = { confirmRepair = false }) { Text("Cancelar") } },
         )
+    }
+}
+
+/** La versión instalada y, si hay una nueva en GitHub, el botón para actualizar. */
+@Composable
+private fun UpdateRow(version: String, update: UpdateState, onCheck: () -> Unit, onInstall: () -> Unit) {
+    when (update) {
+        is UpdateState.Available -> NavRow(
+            "Actualizar a la versión ${update.release.version}",
+            update.release.notes.lineSequence().map { it.trim().removePrefix("- ") }.firstOrNull { it.isNotBlank() }
+                ?: "Tocá para bajarla e instalarla",
+            accent = true,
+            onClick = onInstall,
+        )
+        is UpdateState.Downloading -> InfoRow("Bajando la versión ${update.release.version}", "${(update.progress * 100).toInt()} %")
+        is UpdateState.Installing -> InfoRow("Instalando la versión ${update.release.version}", "Confirmá en la pantalla de Android")
+        is UpdateState.Failed -> NavRow("No se pudo actualizar", update.message, accent = true, onClick = if (update.release != null) onInstall else onCheck)
+        UpdateState.Checking -> InfoRow("Versión $version", "Buscando actualizaciones…")
+        UpdateState.UpToDate -> NavRow("Versión $version", "Es la última · tocá para buscar de nuevo", onClick = onCheck)
+        UpdateState.Idle -> NavRow("Versión $version", "Tocá para buscar actualizaciones", onClick = onCheck)
     }
 }
 

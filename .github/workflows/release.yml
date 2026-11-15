@@ -1,0 +1,75 @@
+# Publica una versión de Control TV: al subir una etiqueta vX.Y.Z, compila el APK firmado, corre las pruebas y
+# crea la release con control-tv.apk. La app avisa sola que hay una versión nueva (update/Updater.kt).
+#
+#   1. Subir la versión en app/build.gradle.kts (appVersion) y hacer commit.
+#   2. git tag -a v1.2.0 -m "Lo que cambia, una línea por cosa"   (el mensaje son las notas de la release)
+#   3. git push origin main v1.2.0
+name: Publicar versión
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # checkout puede dejar la etiqueta como liviana y sin mensaje: se trae de nuevo con su mensaje.
+      - name: Traer la etiqueta con su mensaje
+        run: git fetch --force --tags
+
+      - name: La etiqueta coincide con la versión de la app
+        run: |
+          APP=$(grep -oP 'appVersion.*\?: "\K[0-9]+\.[0-9]+\.[0-9]+' app/build.gradle.kts)
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "Etiqueta $TAG, app $APP"
+          if [ "$APP" != "$TAG" ]; then
+            echo "::error::La etiqueta es v$TAG pero app/build.gradle.kts dice $APP. Subí appVersion antes de etiquetar."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Clave de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "::error::Falta el secreto KEYSTORE_BASE64"; exit 1; fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/control-tv-release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/control-tv-release.jks" >> "$GITHUB_ENV"
+
+      - name: Pruebas y APK firmado
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: control-tv
+        run: ./gradlew testDebugUnitTest assembleRelease --no-daemon --console=plain
+
+      # Si la firma no es la de siempre, los celus no aceptarían la actualización: mejor frenar acá.
+      - name: Revisar la firma
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          CERT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -oP 'SHA-256 digest: \K[0-9a-f]+' | head -1)
+          echo "Firma: $CERT"
+          [ "$CERT" = "e0d1876e348d7f44b08f84fb0ee97b0d1f09327457d0c447efa320ffb4a1d212" ] || { echo "::error::El APK no está firmado con la clave de Control TV"; exit 1; }
+
+      - name: Publicar la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk control-tv.apk
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notas.md
+          gh release create "$GITHUB_REF_NAME" control-tv.apk \
+            --title "Control TV ${GITHUB_REF_NAME#v}" \
+            --notes-file notas.md

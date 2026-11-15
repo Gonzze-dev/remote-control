@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.gonzalo.controltv.App
 import com.gonzalo.controltv.cast.CastService
 import com.gonzalo.controltv.cast.CastState
+import com.gonzalo.controltv.update.UpdateState
 import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.data.TvApp
@@ -131,6 +132,25 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         repeat(old.length - common) { connection.sendKey(Keys.DEL) }
         val added = new.substring(common)
         if (added.isNotEmpty()) connection.sendText(added)
+    }
+
+    // ---- Actualizaciones ----
+
+    val update: StateFlow<UpdateState> = app.updater.state
+    val appVersion: String = app.updater.currentVersion
+
+    fun checkUpdates() {
+        viewModelScope.launch { app.updater.check(force = true) }
+    }
+
+    /** False si Android todavía no deja que Control TV instale apps: hay que mandar a la persona a permitirlo. */
+    fun installUpdate(): Boolean {
+        val release = (update.value as? UpdateState.Available)?.release
+            ?: (update.value as? UpdateState.Failed)?.release
+            ?: return true
+        if (!app.updater.canInstall()) return false
+        viewModelScope.launch { app.updater.install(release) }
+        return true
     }
 
     // ---- Transmitir ----

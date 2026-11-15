@@ -10,6 +10,7 @@ import com.gonzalo.controltv.data.ConnectionLog
 import com.gonzalo.controltv.data.Settings
 import com.gonzalo.controltv.tv.CertManager
 import com.gonzalo.controltv.tv.TvConnection
+import com.gonzalo.controltv.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,8 @@ class App : Application() {
         private set
     lateinit var connection: TvConnection
         private set
+    lateinit var updater: Updater
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -39,6 +42,9 @@ class App : Application() {
         certs = CertManager(filesDir)
         icons = AppIcons(this)
         connection = TvConnection(certs, log, scope)
+        updater = Updater(this, log)
+        // ¿Hay una versión nueva en GitHub? Como mucho una consulta por día.
+        scope.launch { updater.check() }
 
         scope.launch {
             settings.flow

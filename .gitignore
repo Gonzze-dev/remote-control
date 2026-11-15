@@ -8,3 +8,8 @@ build/
 /captures
 .externalNativeBuild/
 .cxx/
+
+# Firma de las versiones publicadas: la clave vive fuera del repo (Documents\ControlTV-firma)
+keystore.properties
+*.jks
+*.keystore

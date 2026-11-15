@@ -103,6 +103,7 @@ fun ControlScreen(
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
     casting: Boolean = false,
+    updateAvailable: Boolean = false,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
     var lastSent by rememberSaveable { mutableStateOf<String?>(null) }
@@ -126,7 +127,7 @@ fun ControlScreen(
     }
 
     Column(modifier.fillMaxSize()) {
-        StatusHeader(state, appLabel, settings.ip, onOpenSettings, actions::retry, onRepair) {
+        StatusHeader(state, appLabel, settings.ip, onOpenSettings, actions::retry, onRepair, settingsBadge = updateAvailable) {
             // La tecla de configuración del control: abre el panel rápido de Google TV.
             // Es la única forma de llegar a la configuración: la tele rechaza los links a esas pantallas.
             IconButton(onClick = { actions.key(Keys.SETTINGS) }) {
@@ -242,6 +243,7 @@ fun StatusHeader(
     onOpenSettings: () -> Unit,
     onRetry: () -> Unit,
     onRepair: () -> Unit,
+    settingsBadge: Boolean = false,
     extra: @Composable () -> Unit = {},
 ) {
     val (dot, title, subtitle) = when (state) {
@@ -290,8 +292,21 @@ fun StatusHeader(
             is TvState.Conectando -> Unit
         }
         extra()
-        IconButton(onClick = onOpenSettings) {
-            Icon(painterResource(R.drawable.ic_settings), "Ajustes", tint = Palette.TextMuted)
+        Box {
+            IconButton(onClick = onOpenSettings) {
+                Icon(painterResource(R.drawable.ic_settings), if (settingsBadge) "Ajustes (hay una actualización)" else "Ajustes", tint = Palette.TextMuted)
+            }
+            // Hay una versión nueva: el aviso está en Ajustes.
+            if (settingsBadge) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = 10.dp)
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(Palette.Accent),
+                )
+            }
         }
     }
 }

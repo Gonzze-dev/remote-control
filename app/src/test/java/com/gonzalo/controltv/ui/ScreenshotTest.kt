@@ -113,7 +113,7 @@ class ScreenshotTest {
 
     @Test
     fun ajustes() = shot("07_ajustes") {
-        SettingsScreen(settings, connected, {}, {}, {}, {}, {}, {}, {}, {})
+        SettingsScreen(settings, connected, {}, {}, {}, {}, {}, {}, {}, {}, version = "1.1.0")
     }
 
     @Test

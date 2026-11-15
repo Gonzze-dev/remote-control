@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -55,6 +56,8 @@ import com.gonzalo.controltv.data.AppNames
 import com.gonzalo.controltv.data.AppSettings
 import com.gonzalo.controltv.tv.TvState
 import com.gonzalo.controltv.ui.theme.Palette
+import com.gonzalo.controltv.update.UpdateState
+import com.gonzalo.controltv.update.Updater
 import kotlinx.coroutines.launch
 
 /** Arranque: permiso de red local → vinculación (la primera vez) → control. */
@@ -117,6 +120,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
     val apps by vm.apps.collectAsStateWithLifecycle()
     val icons by vm.icons.collectAsStateWithLifecycle()
     val casting by vm.casting.collectAsStateWithLifecycle()
+    val update by vm.update.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Control) }
     var overlay by rememberSaveable { mutableStateOf(Overlay.None) }
     val snackbar = remember { SnackbarHostState() }
@@ -153,6 +157,24 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
             onVibration = vm::setVibration,
             onLiveText = vm::setLiveText,
             onOpenLog = { overlay = Overlay.Log },
+            version = vm.appVersion,
+            update = update,
+            onCheckUpdates = vm::checkUpdates,
+            onInstallUpdate = {
+                if (!vm.installUpdate()) {
+                    // La primera vez Android pide permitir que Control TV instale apps.
+                    Toast.makeText(context, "Permití «Instalar apps desconocidas» y volvé a tocar Actualizar", Toast.LENGTH_LONG).show()
+                    context.startActivity(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
+                    )
+                }
+            },
+            onShareApp = {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, "Control TV, el control remoto para la tele: ${Updater.DOWNLOAD_URL}")
+                context.startActivity(Intent.createChooser(send, "Compartir Control TV"))
+            },
         )
         Overlay.Log -> {
             val lines by vm.logLines.collectAsStateWithLifecycle()
@@ -189,6 +211,7 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
                         onRepair = vm::openPairing,
                         onMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } },
                         casting = casting != CastState.Idle,
+                        updateAvailable = update is UpdateState.Available,
                     )
                     Tab.Apps -> AppsScreen(
                         apps = apps,

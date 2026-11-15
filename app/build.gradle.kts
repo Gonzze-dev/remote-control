@@ -1,7 +1,28 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// La versión se sube acá antes de publicar; la etiqueta vX.Y.Z tiene que coincidir (el workflow lo revisa).
+// `-PappVersion=1.0.9` la cambia para una compilación de prueba.
+val appVersion = (findProperty("appVersion") as String?) ?: "1.1.0"
+
+/** 1.2.3 → 10203. Updater.versionCode hace la misma cuenta con la etiqueta de la release. */
+fun versionCodeOf(version: String): Int {
+    val (major, minor, patch) = version.split('.').map { it.toInt() }
+    require(minor <= 99 && patch <= 99) { "Versión inválida: $version" }
+    return major * 10_000 + minor * 100 + patch
+}
+
+// La clave de firma no está en el repo: en esta PC la nombra keystore.properties (git lo ignora) y en GitHub
+// Actions llega por variables de entorno desde los secretos del repo. Sin ninguna, se usa la de depuración.
+val keystore = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signing(key: String, env: String): String? = keystore.getProperty(key) ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+val releaseStoreFile = signing("storeFile", "KEYSTORE_FILE")
 
 android {
     namespace = "com.gonzalo.controltv"
@@ -11,14 +32,31 @@ android {
         applicationId = "com.gonzalo.controltv"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = versionCodeOf(appVersion)
+        versionName = appVersion
+    }
+
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = signing("storePassword", "KEYSTORE_PASSWORD")
+                keyAlias = signing("keyAlias", "KEY_ALIAS") ?: "control-tv"
+                keyPassword = signing("keyPassword", "KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
+        }
+        // Con la clave a mano, las compilaciones de prueba también se firman con ella: así se instalan encima de
+        // la versión publicada sin desinstalar (y sin perder la vinculación).
+        debug {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 
