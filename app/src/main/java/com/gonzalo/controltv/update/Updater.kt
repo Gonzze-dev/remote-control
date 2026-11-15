@@ -1,9 +1,6 @@
 package com.gonzalo.controltv.update
 
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import com.gonzalo.controltv.tv.TvLog
@@ -25,15 +22,17 @@ sealed interface UpdateState {
     data object Checking : UpdateState
     data object UpToDate : UpdateState
     data class Available(val release: Release) : UpdateState
-    data class Downloading(val release: Release, val progress: Float) : UpdateState
-    data class Installing(val release: Release) : UpdateState
-    data class Failed(val message: String, val release: Release? = null) : UpdateState
+    data class Failed(val message: String) : UpdateState
 }
 
 /**
  * Actualizaciones desde GitHub Releases: cada versión es una release `vX.Y.Z` del repo con el APK
  * `control-tv.apk` (la publica el workflow de GitHub Actions). La app mira la última release como mucho una
- * vez por día, y al actualizar baja el APK directo a una sesión de instalación de Android.
+ * vez por día y avisa; el APK se baja con el navegador y lo instala Android.
+ *
+ * La app no lo instala ella misma a propósito: la 1.1.0 lo hacía (REQUEST_INSTALL_PACKAGES y PackageInstaller)
+ * y Google Play Protect la bloqueó como "app dañina", porque una app desconocida que baja e instala APKs se
+ * parece a un instalador de malware.
  */
 class Updater(context: Context, private val log: TvLog) {
     private val context = context.applicationContext
@@ -47,7 +46,6 @@ class Updater(context: Context, private val log: TvLog) {
 
     /** Pregunta a GitHub por la última versión. Sin [force], no más de una vez cada [CHECK_EVERY_MS]. */
     suspend fun check(force: Boolean = false) {
-        if (_state.value is UpdateState.Downloading || _state.value is UpdateState.Installing) return
         val now = System.currentTimeMillis()
         if (!force && now - prefs.getLong(LAST_CHECK, 0) < CHECK_EVERY_MS) {
             // Lo que se encontró la última vez sigue valiendo hasta la próxima consulta.
@@ -69,28 +67,6 @@ class Updater(context: Context, private val log: TvLog) {
         }
     }
 
-    /** Android tiene que permitir que Control TV instale apps (se pide una sola vez, en Ajustes del celu). */
-    fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
-
-    /** Baja la versión y le pide a Android que la instale. Android muestra su confirmación. */
-    suspend fun install(release: Release) {
-        _state.value = UpdateState.Downloading(release, 0f)
-        try {
-            withContext(Dispatchers.IO) { downloadAndCommit(release) }
-            _state.value = UpdateState.Installing(release)
-        } catch (e: Exception) {
-            log.log("✗ No se pudo actualizar: $e")
-            _state.value = UpdateState.Failed("No se pudo bajar la versión ${release.version}: ${e.message}", release)
-        }
-    }
-
-    /** Lo informa [InstallReceiver] cuando Android termina (o cancela) la instalación. */
-    internal fun installFinished(ok: Boolean, message: String?) {
-        val release = (_state.value as? UpdateState.Installing)?.release
-        _state.value = if (ok) UpdateState.UpToDate
-        else UpdateState.Failed(message ?: "Se canceló la instalación", release)
-    }
-
     private fun fetchLatest(): Release? {
         val conn = URL(LATEST_URL).openConnection() as HttpURLConnection
         try {
@@ -103,51 +79,6 @@ class Updater(context: Context, private val log: TvLog) {
             return parseRelease(conn.inputStream.bufferedReader().readText())
         } finally {
             conn.disconnect()
-        }
-    }
-
-    private fun downloadAndCommit(release: Release) {
-        val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            setAppPackageName(context.packageName)
-            if (release.size > 0) setSize(release.size)
-            // Desde la segunda actualización (Control TV ya es quien la instaló) Android puede no pedir confirmación.
-            if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-        }
-        val sessionId = installer.createSession(params)
-        val session = installer.openSession(sessionId)
-        try {
-            val conn = URL(release.apkUrl).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 30_000
-            conn.setRequestProperty("User-Agent", "ControlTV-Android")
-            if (conn.responseCode != 200) throw IOException("GitHub contestó ${conn.responseCode}")
-            val total = conn.contentLengthLong.takeIf { it > 0 } ?: release.size
-            conn.inputStream.use { input ->
-                session.openWrite(APK_NAME, 0, total.takeIf { it > 0 } ?: -1).use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var done = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        out.write(buf, 0, n)
-                        done += n
-                        if (total > 0) _state.value = UpdateState.Downloading(release, (done.toFloat() / total).coerceIn(0f, 1f))
-                    }
-                    session.fsync(out)
-                }
-            }
-            val callback = PendingIntent.getBroadcast(
-                context, sessionId, Intent(context, InstallReceiver::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-            )
-            log.log("→ Instalando la versión ${release.version}")
-            session.commit(callback.intentSender)
-        } catch (e: Exception) {
-            session.abandon()
-            throw e
-        } finally {
-            session.close()
         }
     }
 

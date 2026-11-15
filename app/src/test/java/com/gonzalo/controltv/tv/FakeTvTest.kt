@@ -37,8 +37,8 @@ class FakeTvTest {
     @After
     fun tearDown() = tv.close()
 
-    private fun pair(): String {
-        val client = PairingClient("127.0.0.1", phone, log, tv.pairingPort)
+    private fun pair(identity: ClientIdentity = phone): String {
+        val client = PairingClient("127.0.0.1", identity, log, tv.pairingPort)
         client.start("Mi control")
         val code = tv.shownCodes.poll(5, TimeUnit.SECONDS)!!
         assertTrue(client.isCodePlausible(code))
@@ -51,6 +51,39 @@ class FakeTvTest {
         assertEquals(tv.fingerprint, fingerprint)
         assertEquals("Mi control", tv.pairingNames.poll())
         assertEquals(listOf(Tls.sha256Hex(phone.certificate.encoded)), tv.pairedClients.toList())
+    }
+
+    @Test
+    fun twoPhonesStayPaired() {
+        // Mi celu y el de mi mamá: cada uno con su certificado, la tele recuerda a los dos.
+        val mine = CertManager(createTempDirectory()).identityForPairing()
+        val mom = CertManager(createTempDirectory()).identityForPairing()
+        pair(mine)
+        pair(mom)
+        assertEquals(
+            setOf(Tls.sha256Hex(mine.certificate.encoded), Tls.sha256Hex(mom.certificate.encoded)),
+            tv.pairedClients.toSet(),
+        )
+    }
+
+    @Test
+    fun theOldSharedCertificateIsReplacedBeforePairing() {
+        // Así quedaron las primeras versiones: CN=atvremote en todos los celus. La tele real borra al anterior.
+        val oldMine = CertManager(createTempDirectory()).create(CertManager.SHARED_NAME)
+        val oldMom = CertManager(createTempDirectory()).create(CertManager.SHARED_NAME)
+        pair(oldMine)
+        pair(oldMom)
+        assertEquals(listOf(Tls.sha256Hex(oldMom.certificate.encoded)), tv.pairedClients.toList())
+
+        // Al volver a vincular, mi celu cambia el certificado viejo por uno propio y el de mamá no se pierde.
+        val dir = createTempDirectory()
+        CertManager(dir).create(CertManager.SHARED_NAME)
+        val renewed = CertManager(dir).identityForPairing()
+        assertFalse(CertManager.isShared(renewed))
+        assertTrue(renewed.certificate.subjectX500Principal.name.startsWith("CN=atvremote-"))
+        assertEquals(renewed.certificate, CertManager(dir).identity().certificate) // quedó guardado
+        pair(renewed)
+        assertEquals(2, tv.pairedClients.size)
     }
 
     @Test

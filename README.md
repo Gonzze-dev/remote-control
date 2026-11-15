@@ -11,8 +11,14 @@ o escaneá el código con el celu:
 <img src="docs/descarga-qr.png" width="160" alt="Código QR para bajar Control TV">
 
 El link siempre baja la última versión. Al abrir el APK, Android pide permitir instalar apps desde el navegador
-(o desde Archivos). Después la app avisa sola cuando hay una versión nueva: aparece un punto en el engranaje, y
-en Ajustes, "Actualizar a la versión…". También se puede compartir el link desde Ajustes → Compartir la app.
+(o desde Archivos). Google Play Protect puede avisar que no conoce la app o bloquearla como "dañina": es porque
+no viene de Play Store y la firma es nueva para Google. Tocá **Instalar de todas formas** y, si ofrece mandarla a
+analizar, aceptá.
+
+Después la app avisa sola cuando hay una versión nueva: aparece un punto en el engranaje, y en Ajustes,
+"Actualizar a la versión…". Ese botón baja el APK con el navegador; al abrirlo, Android lo instala encima sin
+perder la vinculación. La app no se instala sola a propósito: la 1.1.0 lo hacía y Play Protect la marcó como
+dañina. También se puede compartir el link desde Ajustes → Compartir la app.
 
 ## Publicar una versión
 
@@ -48,14 +54,15 @@ también se firman con la clave de las versiones publicadas, así se instalan en
 
 ## Probar sin la tele
 
-`gradlew testDebugUnitTest` corre 53 pruebas (y saltea una que necesita el Chromecast de verdad):
+`gradlew testDebugUnitTest` corre 55 pruebas (y saltea una que necesita el Chromecast de verdad):
 
 - **ProtocolTest**: bytes exactos de cada mensaje, el secreto de vinculación y el certificado.
 - **AppLinksTest**: el link para abrir una app por paquete, el cambio de los links viejos y que el Inicio de
   CleanYourTV cuente como Inicio.
 - **FakeTvTest**: una tele de mentira con TLS de verdad (`FakeTv.kt`). Prueba la vinculación con el
   código, el código mal tipeado, la sesión de control (teclas, texto, apps, ping, volumen),
-  el celu desconocido, la huella cambiada, la reconexión, que muchos reinicios seguidos no
+  el celu desconocido, la huella cambiada, que dos celus vinculados no se pisen (la tele guarda cada uno por el
+  nombre de su certificado), la reconexión, que muchos reinicios seguidos no
   dejen sesiones abiertas de más y que mandar comandos sin parar no corte la sesión.
 - **CastClientTest**: un Chromecast de mentira con TLS de verdad (`FakeCast.kt`). Prueba los bytes de Cast v2,
   abrir el reproductor y cargar un archivo, el archivo que no se puede abrir, los PING, el final del video,
@@ -203,6 +210,10 @@ Lo que se aprendió:
   `market://launch`, aunque la app esté instalada. `market://details` y
   `https://play.google.com/…` sí andan.
 - Desde el protector de pantalla, la primera tecla solo despierta la tele.
+- La tele guarda cada celu vinculado por el nombre (CN) de su certificado, y al vincular uno borra al que tenía
+  el mismo nombre (`AtvRemote.KeyStoreManager: Deleting entry for … (CN=atvremote)`). Hasta la 1.1.0 todos los
+  celus usaban `CN=atvremote`, así que vincular un segundo celu desvinculaba al primero. Desde la 1.1.1 cada
+  celu tiene `CN=atvremote-<12 caracteres al azar>`, y uno con el nombre viejo lo cambia al volver a vincular.
 - Falta probar el resto de los links de la lista de apps.
 
 Si algo falla, Ajustes → Log de conexión muestra cada mensaje que va y viene, y se puede copiar.

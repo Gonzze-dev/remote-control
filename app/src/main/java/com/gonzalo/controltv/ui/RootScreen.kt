@@ -161,12 +161,10 @@ private fun MainRoute(vm: RemoteViewModel, s: AppSettings) {
             update = update,
             onCheckUpdates = vm::checkUpdates,
             onInstallUpdate = {
-                if (!vm.installUpdate()) {
-                    // La primera vez Android pide permitir que Control TV instale apps.
-                    Toast.makeText(context, "Permití «Instalar apps desconocidas» y volvé a tocar Actualizar", Toast.LENGTH_LONG).show()
-                    context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
-                    )
+                // El navegador baja el APK; al abrirlo desde la notificación, Android lo instala encima.
+                vm.updateUrl()?.let { url ->
+                    Toast.makeText(context, "Cuando termine de bajar, abrilo y tocá Actualizar", Toast.LENGTH_LONG).show()
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                 }
             },
             onShareApp = {

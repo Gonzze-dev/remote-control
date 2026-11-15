@@ -27,6 +27,7 @@ class FakeTv(dir: File) : Closeable {
 
     /** Huellas de los celus vinculados. */
     val pairedClients = CopyOnWriteArrayList<String>()
+    private val subjects = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Lo que "aparece en la pantalla" de la tele al vincular. */
     val shownCodes = LinkedBlockingQueue<String>()
@@ -105,7 +106,13 @@ class FakeTv(dir: File) : Closeable {
 
         val secret = ProtoMessage.parse(Framing.read(input)).message(40)?.bytes(1) ?: error("se esperaba secret")
         if (secret.contentEquals(expected)) {
-            pairedClients.add(Tls.sha256Hex(client.encoded))
+            // Como la tele real (AtvRemote.KeyStoreManager): guarda cada celu por el nombre de su certificado, y
+            // al vincular uno borra al que tenía el mismo nombre.
+            val name = client.subjectX500Principal.name
+            subjects.filterValues { it == name }.keys.forEach { old -> pairedClients.remove(old); subjects.remove(old) }
+            val fp = Tls.sha256Hex(client.encoded)
+            pairedClients.add(fp)
+            subjects[fp] = name
             reply({ message(41) { bytes(1, secret) } })
         } else {
             reply({}, status = 402)

@@ -187,13 +187,11 @@ private fun UpdateRow(version: String, update: UpdateState, onCheck: () -> Unit,
         is UpdateState.Available -> NavRow(
             "Actualizar a la versión ${update.release.version}",
             update.release.notes.lineSequence().map { it.trim().removePrefix("- ") }.firstOrNull { it.isNotBlank() }
-                ?: "Tocá para bajarla e instalarla",
+                ?: "Tocá para bajarla con el navegador",
             accent = true,
             onClick = onInstall,
         )
-        is UpdateState.Downloading -> InfoRow("Bajando la versión ${update.release.version}", "${(update.progress * 100).toInt()} %")
-        is UpdateState.Installing -> InfoRow("Instalando la versión ${update.release.version}", "Confirmá en la pantalla de Android")
-        is UpdateState.Failed -> NavRow("No se pudo actualizar", update.message, accent = true, onClick = if (update.release != null) onInstall else onCheck)
+        is UpdateState.Failed -> NavRow("No se pudo buscar actualizaciones", update.message, accent = true, onClick = onCheck)
         UpdateState.Checking -> InfoRow("Versión $version", "Buscando actualizaciones…")
         UpdateState.UpToDate -> NavRow("Versión $version", "Es la última · tocá para buscar de nuevo", onClick = onCheck)
         UpdateState.Idle -> NavRow("Versión $version", "Tocá para buscar actualizaciones", onClick = onCheck)

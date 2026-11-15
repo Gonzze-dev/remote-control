@@ -143,15 +143,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         viewModelScope.launch { app.updater.check(force = true) }
     }
 
-    /** False si Android todavía no deja que Control TV instale apps: hay que mandar a la persona a permitirlo. */
-    fun installUpdate(): Boolean {
-        val release = (update.value as? UpdateState.Available)?.release
-            ?: (update.value as? UpdateState.Failed)?.release
-            ?: return true
-        if (!app.updater.canInstall()) return false
-        viewModelScope.launch { app.updater.install(release) }
-        return true
-    }
+    /** El APK de la versión nueva, para bajarlo con el navegador (Android lo instala). */
+    fun updateUrl(): String? = (update.value as? UpdateState.Available)?.release?.apkUrl
 
     // ---- Transmitir ----
 
@@ -324,7 +317,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application),
         viewModelScope.launch {
             val client = withContext(Dispatchers.IO) {
                 runCatching {
-                    PairingClient(host, app.certs.identity(), app.log).also {
+                    PairingClient(host, app.certs.identityForPairing(), app.log).also {
                         pairingClient = it
                         it.start(pairingName)
                     }
